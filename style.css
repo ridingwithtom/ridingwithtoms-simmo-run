@@ -278,7 +278,7 @@ canvas#game {
   justify-content: center;
 }
 
-#touch-zones .zone.left  { left: 0;  border-right: 1px solid rgba(255,248,236,0.13); }
+#touch-zones .zone.left  { left: 0; }
 #touch-zones .zone.right { right: 0; }
 
 #touch-zones .zone span {
@@ -371,4 +371,25 @@ canvas#game {
   #start-screen h1 { font-size: 19px; }
   .rule strong { font-size: 12.5px; }
   .rule-body { font-size: 10px; line-height: 1.4; }
+}
+
+/* ---------- add-to-home-screen tip ---------- */
+/* Only worth showing on a touch device that isn't already installed. Given its
+   own class rather than reusing .touch-only, which is an inline-level helper. */
+.a2hs {
+  display: none;
+  font-size: 12px;
+  opacity: 0.62;
+  margin-top: 8px;
+  letter-spacing: 0.2px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .a2hs { display: block; }
+}
+
+/* Already installed, or the browser granted real fullscreen — nothing to tell
+   them. Also reclaim the space the tip was using on a short screen. */
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  .a2hs { display: none !important; }
 }

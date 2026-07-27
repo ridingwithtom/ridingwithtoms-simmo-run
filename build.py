@@ -21,6 +21,10 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(ROOT, "docs")
 
 CODE = ["index.html", "style.css", "game.js"]
+# Referenced from index.html rather than loaded by game.js, so these sit outside
+# the ASSETS check below.
+EXTRA = ["manifest.webmanifest"]
+ICONS = ["icon-180.png", "icon-192.png", "icon-512.png"]
 # Everything game.js actually loads. Keep this in step with LANDMARKS in game.js.
 ASSETS = [
     "bike.png", "mt-dare-hotel.png", "birdsville-pub.png", "big-red-sign.png",
@@ -61,6 +65,19 @@ def main():
     for name in ASSETS:
         if name not in produced:
             sys.exit(f"optimise.py did not produce {name}")
+
+    for name in ICONS:
+        shutil.copy2(os.path.join(ROOT, "assets", name),
+                     os.path.join(DIST, "assets", name))
+    for name in EXTRA:
+        shutil.copy2(os.path.join(ROOT, name), os.path.join(DIST, name))
+
+    # Anything index.html asks for has to exist in the output, or a phone hits a
+    # 404 on the icon and silently falls back to a screenshot of the page.
+    for ref in set(re.findall(r'(?:href|src)="((?:assets/)?[\w.\-]+\.(?:png|webmanifest))"',
+                              open(os.path.join(ROOT, "index.html")).read())):
+        if not os.path.exists(os.path.join(DIST, ref)):
+            sys.exit(f"index.html references {ref}, which isn't in the build.")
 
     stamp = str(int(time.time()))
     for name in CODE:

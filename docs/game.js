@@ -102,7 +102,25 @@
     return clamp(sum, -1, 1);
   }
 
+  // Real fullscreen where the browser allows it. Android Chrome and iPad Safari
+  // do; iPhone Safari has never supported the Fullscreen API, which is why the
+  // title screen also points at Add to Home Screen. Must run inside a user
+  // gesture, so it hangs off the tap that starts the run.
+  function tryFullscreen() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      if (p && p.catch) p.catch(() => { /* refused; the game plays fine anyway */ });
+    } catch (_) { /* ditto */ }
+  }
+
   window.addEventListener('pointerdown', (e) => {
+    const starting = state.mode === 'title' || state.mode === 'finished'
+                  || state.mode === 'dead';
+    if (starting && e.pointerType !== 'mouse') tryFullscreen();
     if (state.mode === 'title') { startRun(); e.preventDefault(); return; }
     if (state.mode === 'finished' || state.mode === 'dead') {
       resetRun(); e.preventDefault(); return;
