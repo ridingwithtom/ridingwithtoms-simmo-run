@@ -1618,13 +1618,20 @@
   // higher on screen than the creek bed you're looking up from, so anything much
   // over 400 has its canopy sliced off by the top of the frame on a short window.
   const RIVER_GUMS = [
-    { x: 16980, h: 290, flip: true },
-    { x: 17130, h: 390, flip: false },
-    { x: 17335, h: 325, flip: true },
-    { x: 18305, h: 400, flip: true },
-    { x: 18540, h: 335, flip: false },
+    { x: 16890, h: 290, flip: true },
+    { x: 17120, h: 390, flip: false },
+    { x: 17340, h: 325, flip: true },
+    { x: 18320, h: 400, flip: true },
+    { x: 18560, h: 335, flip: false },
     { x: 18800, h: 285, flip: true }
-  ];
+  // Nudged onto the most level ground within reach. The search radius is kept well
+  // under half the spacing on purpose: at 130 the trees hunted out the same few flat
+  // spots and two pairs ended up 10 and 25px apart, which reads as one mangled tree
+  // rather than a grove. The tilt and sand drift below do the real work of seating
+  // them, so this only has to avoid the very worst ground.
+  ].map(g => ({ ...g, x: flattestNear(g.x, 45, g.h * 0.58) }));
+
+  const GUM_MOUND_FRAC = 0.38;      // half-width of the sprite's dirt base
 
   function drawRiverGums(screenYOf) {
     const lm = LANDMARKS.riverGum;
@@ -1635,7 +1642,17 @@
       const drawW = g.h * aspect;
       const sx = (g.x - state.cameraX) + W * BIKE_SCREEN_FRAC;
       if (sx + drawW / 2 < -80 || sx - drawW / 2 > W + 80) continue;
-      const groundY = screenYOf(nearTerrain(g.x));
+
+      const mh = drawW * GUM_MOUND_FRAC;
+      // Seat on the highest ground under the mound so no part of it hangs in the
+      // air, and lean with the bank. River gums on a creek bank do lean, so this is
+      // free realism — but only part way, or the trunk looks blown over.
+      let seat = -Infinity;
+      for (let i = -4; i <= 4; i++) seat = Math.max(seat, nearTerrain(g.x + (i / 4) * mh));
+      const yL = nearTerrain(g.x - mh), yR = nearTerrain(g.x + mh);
+      const tilt = Math.atan2(-(yR - yL), 2 * mh) * 0.55;
+      const groundY = screenYOf(seat);
+      const cos = Math.cos(tilt), sin = Math.sin(tilt);
 
       ctx.save();
       ctx.translate(sx, groundY);
@@ -1646,9 +1663,52 @@
       ctx.fillStyle = 'rgba(20,10,5,0.24)';
       ctx.fill();
       ctx.restore();
+      ctx.rotate(tilt);
       if (g.flip) ctx.scale(-1, 1);
       ctx.drawImage(lm.img, -drawW / 2, -g.h + g.h * 0.015, drawW, g.h);
       ctx.restore();
+
+      // Sand drifted against the base. Fills whatever gap is left between the
+      // mound's straight underside and the real ground, so the join can't show
+      // however the bank falls away, and heaps a little higher at the trunk.
+      const span = mh * 1.14, hump = g.h * 0.055;
+      const baseY = (u) => groundY + u * sin;          // sprite's underside on screen
+      const top = [], bottom = [];
+      for (let i = -12; i <= 12; i++) {
+        const u = (i / 12) * span;
+        const screenX = sx + u * cos;
+        const k = 1 - (u / span) * (u / span);
+        top.push([screenX, baseY(u) - 3 - hump * k * k]);
+        const groundHere = screenYOf(nearTerrain(g.x + u));
+        bottom.push([screenX, Math.max(baseY(u), groundHere)]);
+      }
+      ctx.beginPath();
+      ctx.moveTo(top[0][0], top[0][1]);
+      for (const p of top) ctx.lineTo(p[0], p[1]);
+      for (let i = bottom.length - 1; i >= 0; i--) ctx.lineTo(bottom[i][0], bottom[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = sandGradient();
+      ctx.fill();
+
+      // brush and dry grass over the join, to break the drift's clean edge
+      for (let i = 0; i < 7; i++) {
+        const u = (hash(g.x * 0.013 + i * 4.7) - 0.5) * span * 1.8;
+        const bx = sx + u * cos;
+        const by = Math.max(baseY(u), screenYOf(nearTerrain(g.x + u))) - 1;
+        const sc = (0.55 + hash(g.x * 0.021 + i * 2.9) * 0.85) * (g.h / 340);
+        ctx.fillStyle = i % 3 === 0 ? '#6b7238' : '#5c6b3a';
+        ctx.beginPath();
+        ctx.ellipse(bx, by - 4 * sc, 9 * sc, 5 * sc, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(190,160,86,0.75)';
+        ctx.lineWidth = Math.max(1, 1.4 * sc);
+        for (let k = -1; k <= 1; k++) {
+          ctx.beginPath();
+          ctx.moveTo(bx + k * 3 * sc, by);
+          ctx.lineTo(bx + k * 6 * sc, by - 13 * sc);
+          ctx.stroke();
+        }
+      }
     }
   }
 
@@ -2377,6 +2437,17 @@
     drawCamel(t);
   }
 
+  // The near layer's sand fill, shared so anything drawn to blend into the ground
+  // uses byte-identical colours at byte-identical screen heights. Inlining it twice
+  // would work until someone retuned one copy.
+  function sandGradient() {
+    const g = ctx.createLinearGradient(0, H * 0.68 - 260, 0, H);
+    g.addColorStop(0, '#e08245');
+    g.addColorStop(0.3, '#c85f2c');
+    g.addColorStop(1, '#7d3517');
+    return g;
+  }
+
   function drawNearLayer() {
     const horizon = H * 0.68;
     const screenYOf = (elev) => horizon + (state.camY - elev);
@@ -2392,11 +2463,7 @@
     }
     ctx.lineTo(W, H + 400);
     ctx.closePath();
-    const sand = ctx.createLinearGradient(0, horizon - 260, 0, H);
-    sand.addColorStop(0, '#e08245');
-    sand.addColorStop(0.3, '#c85f2c');
-    sand.addColorStop(1, '#7d3517');
-    ctx.fillStyle = sand;
+    ctx.fillStyle = sandGradient();
     ctx.fill();
 
     terrainPts = pts;
