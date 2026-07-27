@@ -919,9 +919,22 @@
   // ---------- the camel ----------
   // Feral dromedaries are all over the Simpson, so one stands on the near ground
   // three quarters of the way across, chewing and watching you go by.
-  // Between the bogged tiger (26%) and the Maccas sign (50%). It used to stand at
-  // 75%, which is now the middle of Eyre Creek.
-  const CAMEL_X = FINISH_DISTANCE * 0.38;
+  // The camel stands on the mid band, so the dunes you ride pass in front of it —
+  // which is the point, but it also meant it could spend its whole time on screen
+  // behind a crest, and on a phone that's a second and a half of nothing. This
+  // hunts for the lowest stretch of near terrain nearby, so it comes into view over
+  // a trough with the dunes well below it.
+  function clearestNear(targetX, radius) {
+    let best = targetX, bestScore = Infinity;
+    for (let x = targetX - radius; x <= targetX + radius; x += 20) {
+      let sum = 0, n = 0;
+      for (let d = -420; d <= 420; d += 60) { sum += nearTerrain(x + d); n++; }
+      const score = sum / n + Math.abs(x - targetX) / 1200;
+      if (score < bestScore) { bestScore = score; best = x; }
+    }
+    return best;
+  }
+  const CAMEL_X = clearestNear(FINISH_DISTANCE * 0.34, 1100);
   const CAMEL_H = 112;   // smaller, since it now stands part-way into the distance
 
   function drawCamel(t) {
@@ -1102,15 +1115,22 @@
       return (Math.max(a, b) + base) * (front ? 26 : 15);
     };
 
+    // Filled with the ground's own gradient and then tinted, rather than with a flat
+    // brown. Flat colour read as a patch laid over the sand however well the shape
+    // was judged, because the desert behind it is a vertical gradient and the heap
+    // wasn't.
     ctx.save();
-    ctx.fillStyle = front ? '#b8622c' : '#a05122';
     ctx.beginPath();
     for (let dx = -span; dx <= span; dx += 6) {
-      const y = gy(dx) - profile(dx) + (front ? 6 : 2);
+      const taper = 1 - Math.pow(Math.abs(dx) / span, 3);   // meet the sand at the ends
+      const y = gy(dx) - profile(dx) * taper + (front ? 6 : 2);
       if (dx === -span) ctx.moveTo(sx + dx, y); else ctx.lineTo(sx + dx, y);
     }
     for (let dx = span; dx >= -span; dx -= 6) ctx.lineTo(sx + dx, gy(dx) + 3);
     ctx.closePath();
+    ctx.fillStyle = sandGradient();
+    ctx.fill();
+    ctx.fillStyle = front ? 'rgba(255,196,140,0.16)' : 'rgba(74,32,12,0.26)';
     ctx.fill();
 
     if (front) {
@@ -1467,7 +1487,7 @@
 
   // Somebody's Tiger, bogged to the axles a quarter of the way in, planted on
   // level sand so it sits square rather than straddling a dune face.
-  const BOG_TIGER_X = flattestNear(FINISH_DISTANCE * 0.25, 900, 160);
+  const BOG_TIGER_X = flattestNear(FINISH_DISTANCE * 0.14, 900, 160);
 
   // Where a landmark sprite actually lands on screen, in the same terms
   // drawLandmarkSprite uses to blit it. Lets a later additive pass place glows at
@@ -1811,6 +1831,119 @@
         }
       }
     }
+  }
+
+  // ---------- dingo ----------
+  // Between the bogged tiger and the Maccas sign. Drawn on the near layer rather
+  // than back with the roos and emus, so it reads as something standing on the track
+  // watching you go past instead of scenery — which means it gets its colour, a
+  // ginger coat and pale legs, where the background animals are flat silhouettes.
+  // 0.225 rather than mid-way between the tiger and the Maccas sign: the camel's
+  // clearest-view search lands it at 0.32, and a near-layer dingo there would stand
+  // in front of the very camel that search was meant to reveal.
+  const DINGO_X = flattestNear(FINISH_DISTANCE * 0.225, 700, 120);
+  const DINGO_H = 78;
+
+  function drawDingo(screenYOf, t) {
+    const sx = (DINGO_X - state.cameraX) + W * BIKE_SCREEN_FRAC;
+    if (sx < -160 || sx > W + 160) return;
+    const groundY = screenYOf(nearTerrain(DINGO_X));
+    const s = DINGO_H / 100;
+
+    // it has heard the bike: ears flick, tail sways, head bobs a little
+    const bob = Math.sin(t * 1.5) * 1.1;
+    const earFlick = Math.sin(t * 3.3) * 0.07;
+    const tailSway = Math.sin(t * 2.1) * 0.13;
+
+    const coat = '#b06f2c', pale = '#d5a463', dark = '#5f3612';
+
+    ctx.save();
+    ctx.translate(sx, groundY);
+    ctx.scale(s, s);
+    ctx.translate(0, bob);
+
+    ctx.save();
+    ctx.filter = 'blur(2px)';
+    ctx.beginPath();
+    ctx.ellipse(0, -bob, 54, 7, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20,10,5,0.28)';
+    ctx.fill();
+    ctx.restore();
+
+    // legs first, so the body sits over the tops of them
+    ctx.strokeStyle = pale;
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    for (const [hx, splay] of [[-26, -6], [-20, 3], [24, -4], [30, 5]]) {
+      ctx.beginPath();
+      ctx.moveTo(hx, -46);
+      ctx.quadraticCurveTo(hx + splay * 0.5, -24, hx + splay, -bob - 1);
+      ctx.stroke();
+    }
+
+    // tail, carried low with a bushy sweep
+    ctx.save();
+    ctx.translate(-38, -60);
+    ctx.rotate(tailSway);
+    ctx.fillStyle = coat;
+    ctx.beginPath();
+    ctx.moveTo(4, -8);
+    ctx.quadraticCurveTo(-22, -6, -32, 14);
+    ctx.quadraticCurveTo(-16, 2, 4, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Torso, neck and head as a single path. Drawn as separate pieces the parts
+    // read as a slab with a dot floating off one end; one outline reads as a dog.
+    ctx.fillStyle = coat;
+    ctx.beginPath();
+    ctx.moveTo(-38, -58);
+    ctx.bezierCurveTo(-42, -74, -12, -78, 12, -72);     // back
+    ctx.bezierCurveTo(22, -70, 24, -76, 33, -82);       // shoulder rising to neck
+    ctx.lineTo(43, -93);
+    ctx.bezierCurveTo(51, -100, 64, -96, 65, -85);      // skull
+    ctx.lineTo(82, -79);                                // muzzle
+    ctx.lineTo(63, -73);
+    ctx.bezierCurveTo(57, -66, 45, -62, 39, -52);       // throat into chest
+    ctx.bezierCurveTo(31, -40, 10, -38, -12, -41);      // belly
+    ctx.bezierCurveTo(-28, -43, -36, -47, -38, -58);
+    ctx.closePath();
+    ctx.fill();
+
+    // pale chest and underline
+    ctx.fillStyle = pale;
+    ctx.beginPath();
+    ctx.moveTo(36, -54);
+    ctx.bezierCurveTo(30, -42, 10, -41, -10, -43);
+    ctx.bezierCurveTo(4, -48, 24, -50, 33, -60);
+    ctx.closePath();
+    ctx.fill();
+
+    // pricked ears
+    ctx.fillStyle = coat;
+    for (const [ex, ey, lean] of [[44, -92, -0.16], [55, -89, 0.04]]) {
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(lean + earFlick);
+      ctx.beginPath();
+      ctx.moveTo(-6, 5);
+      ctx.lineTo(0, -17);
+      ctx.lineTo(7, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.ellipse(80, -78, 3.2, 2.6, 0, 0, Math.PI * 2);   // nose
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(58, -86, 2.6, 2.8, 0, 0, Math.PI * 2);   // eye
+    ctx.fill();
+
+    ctx.restore();
   }
 
   function drawBigRedSign(screenYOf) {
@@ -2549,7 +2682,7 @@
     return g;
   }
 
-  function drawNearLayer() {
+  function drawNearLayer(t) {
     const horizon = H * 0.68;
     const screenYOf = (elev) => horizon + (state.camY - elev);
 
@@ -2622,6 +2755,7 @@
     drawLandmarkSprite(MACCAS_X, screenYOf, LANDMARKS.maccasSign, LANDMARK_SIZE.maccasSign);
     drawCamp(screenYOf, performance.now() * 0.001);
     drawPub(FINISH_DISTANCE, 'BIRDSVILLE PUB', screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville);
+    drawDingo(screenYOf, t);
     drawRiverGums(screenYOf);
     drawLandmarkSprite(BRENDAN_X, screenYOf, LANDMARKS.brendan, LANDMARK_SIZE.brendan);
     drawBigRedSign(screenYOf);
@@ -2923,7 +3057,7 @@
     drawEagle(t);
     drawFarLayer(t);
     drawMidLayer(t);
-    const screenYOf = drawNearLayer();
+    const screenYOf = drawNearLayer(t);
     drawDust(screenYOf);
     drawFish(screenYOf, t);
     drawTheBike(screenYOf);
