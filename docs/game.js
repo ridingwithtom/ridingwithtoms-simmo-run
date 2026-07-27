@@ -156,12 +156,17 @@
   const CREEK_X = 18000;            // Eyre Creek, where the camel used to stand
   const CREEK_HALF = 620;
   const CREEK_DEPTH = 130;
-  const FINISH_DISTANCE = 24000;
+  // 2800px past Big Red wasn't enough for the dune's tail to run out before town.
+  // At 4200 the ground under Birdsville is flat to a 0.027 gradient.
+  const FINISH_DISTANCE = 25400;
   const TOTAL_DUNES = 1200;
 
   const RIDE_SPEED = 430;          // forward speed on dry sand (world px/sec)
   const WATER_DRAG = 0.46;         // share of speed lost at full wading depth
-  const FUEL_START = 78;           // seconds — enough for the run plus ~3 stacks
+  // Seconds. The run is 59.1s of riding plus 1.3s wading the creek, so this leaves
+  // about 21s of slack — the same margin as before the course was lengthened, which
+  // is roughly four stacks.
+  const FUEL_START = 82;
   const CRASH_FUEL_PENALTY = 5;
   const CRASH_RECOVERY_TIME = 1.4;
   const CELEBRATION_TIME = 6.0;      // seconds of fireworks before the end screen
@@ -208,7 +213,11 @@
   // Birdsville pub varying by 95px, which would have the building visibly tilted
   // and one end hanging in the air. Damped, that's 5.7px — flatter than it was.
   const BIG_RED_H = 1120;
-  const BIG_RED_SIGMA = 1800;
+  // 1800 spread the doubled height over so long a face that the steepest part came
+  // out at 0.60, gentler than the 0.86 of the dune this replaced — an easier climb
+  // at the point the run should be hardest. 1500 keeps it a big wide dune while
+  // putting the gradient back near where it was.
+  const BIG_RED_SIGMA = 1500;
 
   function bigRed(x) {
     const d = (x - BIG_RED_X) / BIG_RED_SIGMA;
@@ -225,8 +234,27 @@
     return -CREEK_DEPTH * Math.exp(-d2 * d2);
   }
 
+  // Big Red should read as one dune, not a range. The base terrain running under it
+  // put a bench in the face — the ground actually tipped downhill partway up, which
+  // launched the bike off the lip of the shelf and made it two climbs. Suppressing
+  // the ripples across the dune's own footprint, most at the summit and blending
+  // back to full desert where the dune has faded out, leaves a single clean face.
+  // Suppression has to be near-full right across the face, not just at the summit.
+  // A Gaussian window falls off too fast: it left the ripples at 73% strength a
+  // third of the way up, and the face still slackened to a 0.08 gradient twice on
+  // the climb. That reads as steps, and the crest detector fired on the first one.
+  // A flat-topped window (exp(-d^4)) at 1.6x the dune's width holds the suppression
+  // high until the dune itself has faded out.
+  const BIG_RED_SMOOTH = 0.90;
+
+  function bigRedFlatten(x) {
+    const d = (x - BIG_RED_X) / (BIG_RED_SIGMA * 1.6);
+    const d2 = d * d;
+    return 1 - BIG_RED_SMOOTH * Math.exp(-d2 * d2);
+  }
+
   function nearTerrain(x) {
-    return baseTerrain(x) * padFactor(x) + bigRed(x) + eyreCreek(x);
+    return baseTerrain(x) * padFactor(x) * bigRedFlatten(x) + bigRed(x) + eyreCreek(x);
   }
 
   // The summit doesn't sit at BIG_RED_X: the base terrain runs underneath and pulls
@@ -1387,19 +1415,43 @@
   // On the first dune. The start apron holds the ground flat for the first thousand
   // px or so, then the terrain rises into its first proper crest — found by scanning
   // for it rather than hardcoded, so it stays put if the terrain is ever retuned.
-  const FIRST_DUNE_X = (() => {
-    for (let x = 1000; x < 6000; x += 6) {
+  // The nth dune crest past the start apron. Prominence matters as much as being a
+  // local maximum: the first dune has a second bump 230px along at almost the same
+  // height, and counting that as a separate dune would put the sign on what a rider
+  // reads as the same one. A crest only counts once the ground has dropped 30px
+  // since the last.
+  function duneCrest(n) {
+    let found = 0, valley = Infinity;
+    for (let x = 1000; x < 9000; x += 6) {
       const a = nearTerrain(x - 6), b = nearTerrain(x), c = nearTerrain(x + 6);
-      if (b > a && b >= c && b > 40) return x;
+      if (b < valley) valley = b;
+      // Rise above the low point since the last crest, not height relative to that
+      // crest: measuring against the previous summit skipped a much taller dune
+      // further on, because the ground between never dropped far enough below a
+      // low first crest to re-arm.
+      if (b > a && b >= c && b - valley > 30) {
+        if (++found === n) return x;
+        valley = b;
+      }
     }
-    return 1500;
-  })();
-  const PARK_SIGN_X = flattestNear(FIRST_DUNE_X, 90, 200);
+    return 1500 + n * 400;
+  }
+  const PARK_SIGN_X = flattestNear(duneCrest(2), 90, 200);
   const STUCK_BIKE_X = BIG_RED_CREST - 1500;   // ~halfway up the face by height
   // Brendan is having a shoey on the crest. Biased past the peak so he's clear of
   // the Big Red sign back down the climb, then settled on the most level sand
   // within reach so he stands square rather than straddling the camber.
-  const BIG_RED_SIGN_X = BIG_RED_CREST - 700;
+  // At the foot of the dune rather than partway up it: the last stretch of low
+  // ground before the face starts to climb, found as the point where Big Red's own
+  // contribution first lifts the ground about 90px. Nothing else stands between
+  // there and the summit, so it reads as the sign for the climb ahead.
+  const BIG_RED_SIGN_X = (() => {
+    for (let x = BIG_RED_CREST - 4000; x < BIG_RED_CREST; x += 10) {
+      const d = (x - BIG_RED_X) / BIG_RED_SIGMA;
+      if (BIG_RED_H * Math.exp(-d * d) >= 90) return flattestNear(x, 140, 200);
+    }
+    return BIG_RED_CREST - 2600;
+  })();
   const BRENDAN_X = flattestNear(BIG_RED_CREST + 220, 180, 120);
   // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
   // the sign straddled a dune face with a 49px drop across its base.
