@@ -54,6 +54,9 @@ Re-run it after changing `game.js`, `index.html`, `style.css` or any sprite —
                                    measures contact points and the convex hull
       prep_landmark.py             strips baked-in transparency checkerboards
                                    from the landmark sprites
+      prep_gum.py                  the river gum needs its scale-reference figure
+                                   removed as well, and it is joined to the tree
+                                   through the dirt mound, so --largest can't do it
       optimise.py                  downscales and quantises for the web
     build.py                       assembles docs/
     docs/                          built site — served by GitHub Pages

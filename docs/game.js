@@ -234,10 +234,20 @@
   const SHORE_L = findShore(-1);
   const SHORE_R = findShore(1);
 
-  // How submerged the bed is beneath the surface at x, 0..1. Drives both the drag
-  // on the bike and how the water is drawn.
+  // Depth of water over the ground at x, in world px, and zero anywhere outside
+  // the creek.
+  //
+  // The horizontal bound matters: WATER_Y is an absolute elevation of -8, and the
+  // base terrain swings +/-228 about zero, so testing elevation alone made every
+  // dune trough across the whole desert count as water — dragging the bike, throwing
+  // white spray and killing the saltbush hundreds of times over.
+  function creekDepthAt(x) {
+    if (x <= SHORE_L || x >= SHORE_R) return 0;
+    return Math.max(0, WATER_Y - nearTerrain(x));
+  }
+
   function waterDepthFrac(x) {
-    return clamp((WATER_Y - nearTerrain(x)) / WATER_RISE, 0, 1);
+    return clamp(creekDepthAt(x) / WATER_RISE, 0, 1);
   }
 
   // A band of country between the far ridge and the dunes you ride on, so
@@ -504,7 +514,7 @@
   function spawnDust(worldX, worldY, strength) {
     if (dust.length >= DUST_MAX) return;
     // in the creek the rear wheel throws water, not sand
-    const wet = WATER_Y - nearTerrain(worldX) > 12;
+    const wet = creekDepthAt(worldX) > 12;
     dust.push({
       wet,
       wx: worldX + (Math.random() - 0.5) * 10,
@@ -1343,7 +1353,8 @@
     maccasSign: loadLandmark('maccas-sign.png'),
     eagle:      loadLandmark('eagle-sprite.png'),
     bogTiger:   loadLandmark('tiger-sprite.png'),
-    brendan:    loadLandmark('brendan-sprite.png')
+    brendan:    loadLandmark('brendan-sprite.png'),
+    riverGum:   loadLandmark('river-gum.png')
   };
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
@@ -1593,6 +1604,52 @@
     ctx.moveTo(sx - 34, wallTop - 13); ctx.lineTo(sx - 34, wallTop - 50 + signH);
     ctx.moveTo(sx + 34, wallTop - 13); ctx.lineTo(sx + 34, wallTop - 50 + signH);
     ctx.stroke();
+  }
+
+  // River red gums line the banks of Eyre Creek, which is the only place in the
+  // desert with enough water for them. All from the one sprite — the two supplied
+  // files are pixel-identical — so each is given its own height and some are
+  // mirrored, which is enough to stop them reading as copies.
+  //
+  // Every trunk sits on dry ground outside the shores; gums do stand in the shallows
+  // in real life, but the sprite's dirt mound underneath would look like it was
+  // floating on the water.
+  // Heights are limited by the sky above the bank, not by realism. The banks sit
+  // higher on screen than the creek bed you're looking up from, so anything much
+  // over 400 has its canopy sliced off by the top of the frame on a short window.
+  const RIVER_GUMS = [
+    { x: 16980, h: 290, flip: true },
+    { x: 17130, h: 390, flip: false },
+    { x: 17335, h: 325, flip: true },
+    { x: 18305, h: 400, flip: true },
+    { x: 18540, h: 335, flip: false },
+    { x: 18800, h: 285, flip: true }
+  ];
+
+  function drawRiverGums(screenYOf) {
+    const lm = LANDMARKS.riverGum;
+    if (!lm || !lm.ready || !lm.img.naturalHeight) return;
+    const aspect = lm.img.naturalWidth / lm.img.naturalHeight;
+
+    for (const g of RIVER_GUMS) {
+      const drawW = g.h * aspect;
+      const sx = (g.x - state.cameraX) + W * BIKE_SCREEN_FRAC;
+      if (sx + drawW / 2 < -80 || sx - drawW / 2 > W + 80) continue;
+      const groundY = screenYOf(nearTerrain(g.x));
+
+      ctx.save();
+      ctx.translate(sx, groundY);
+      ctx.save();
+      ctx.filter = 'blur(3px)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, drawW * 0.30, 8, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(20,10,5,0.24)';
+      ctx.fill();
+      ctx.restore();
+      if (g.flip) ctx.scale(-1, 1);
+      ctx.drawImage(lm.img, -drawW / 2, -g.h + g.h * 0.015, drawW, g.h);
+      ctx.restore();
+    }
   }
 
   function drawBigRedSign(screenYOf) {
@@ -2397,6 +2454,7 @@
     drawLandmarkSprite(MACCAS_X, screenYOf, LANDMARKS.maccasSign, LANDMARK_SIZE.maccasSign);
     drawCamp(screenYOf, performance.now() * 0.001);
     drawPub(FINISH_DISTANCE, 'BIRDSVILLE PUB', screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville);
+    drawRiverGums(screenYOf);
     drawLandmarkSprite(BRENDAN_X, screenYOf, LANDMARKS.brendan, LANDMARK_SIZE.brendan);
     drawBigRedSign(screenYOf);
 
@@ -2407,7 +2465,7 @@
       if (r <= 0.45) continue;
       const wx = bx + hash(bx * 0.37) * spacing;
       // saltbush doesn't grow on a creek bed; leave a few at the shallow margins
-      if (WATER_Y - nearTerrain(wx) > 22) continue;
+      if (creekDepthAt(wx) > 22) continue;
       const sx = (wx - state.cameraX) + W * BIKE_SCREEN_FRAC;
       const sy = screenYOf(nearTerrain(wx));
       const s = 7 + r * 8;
@@ -2460,8 +2518,8 @@
       const sx = (wx - state.cameraX) + W * BIKE_SCREEN_FRAC;
       if (sx < -40 || sx > W + 40) continue;
 
+      if (creekDepthAt(wx) < 10) continue;              // beached, or out of the creek
       const bed = nearTerrain(wx);
-      if (bed >= WATER_Y - 6) continue;                 // too shallow here
       const wy = bed + (WATER_Y - bed) * f.depth;
       const sy = screenYOf(wy) + Math.sin(t * 1.7 + f.phase) * 1.6;
 
