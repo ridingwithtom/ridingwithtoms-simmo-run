@@ -1242,6 +1242,135 @@
   // level sand so it sits square rather than straddling a dune face.
   const BOG_TIGER_X = flattestNear(FINISH_DISTANCE * 0.25, 900, 160);
 
+  // Where a landmark sprite actually lands on screen, in the same terms
+  // drawLandmarkSprite uses to blit it. Lets a later additive pass place glows at
+  // fixed points on the artwork and have them track the building as it scrolls.
+  function landmarkRect(worldX, screenYOf, lm, cfg) {
+    if (!lm || !lm.ready || !lm.img.naturalHeight) return null;
+    const h = cfg.h;
+    const scale = h / lm.img.naturalHeight;
+    const w = lm.img.naturalWidth * scale;
+    const sx = (worldX - state.cameraX) + W * BIKE_SCREEN_FRAC;
+    if (sx + w / 2 < -60 || sx - w / 2 > W + 60) return null;
+    const groundY = screenYOf(nearTerrain(worldX));
+    return { x: sx - w / 2, y: groundY - h + h * (cfg.bed || 0), w, h };
+  }
+
+  // ---------- veranda lights ----------
+  // Both pubs are on screen almost entirely in the dark — Mt Dare before dawn,
+  // Birdsville long after sunset — so they were reading as flat silhouettes.
+  // Positions are fractions of the sprite, measured off the artwork, so they hold
+  // at any draw size. Birdsville's are placed on the lamp fixtures already drawn
+  // on its veranda beam.
+  //
+  // Drawn additively after the day tint rather than painted into the PNGs, which
+  // would leave the pubs lit at midday and unable to fade with the sun.
+  const PUB_LIGHTS = {
+    mtDare: {
+      lamps: [{ u: 0.161, v: 0.612 }, { u: 0.399, v: 0.608 }, { u: 0.663, v: 0.612 }],
+      windows: [
+        { u: 0.204, v: 0.678, w: 0.185, h: 0.150 },
+        { u: 0.566, v: 0.718, w: 0.060, h: 0.088 },
+        { u: 0.652, v: 0.718, w: 0.058, h: 0.088 }
+      ],
+      accents: [{ u: 0.714, v: 0.638, tint: [255, 96, 74] }],   // lit payphone sign
+      deckV: 0.93
+    },
+    birdsville: {
+      lamps: [
+        { u: 0.231, v: 0.556 }, { u: 0.395, v: 0.520 },
+        { u: 0.599, v: 0.526 }, { u: 0.762, v: 0.553 }
+      ],
+      windows: [{ u: 0.492, v: 0.790, w: 0.048, h: 0.155 }],    // the open doorway
+      accents: [],
+      deckV: 0.95
+    }
+  };
+
+  const LAMP_WARM = [255, 214, 150];
+
+  function drawVerandaLights(rect, cfg, lvl) {
+    if (!rect || lvl < 0.02) return;
+    const k = rect.h / 250;          // keep the glows in proportion to the sprite
+    const px = (u) => rect.x + u * rect.w;
+    const py = (v) => rect.y + v * rect.h;
+    const [r, g, b] = LAMP_WARM;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // pools of light thrown down onto the decking
+    const deckY = py(cfg.deckV);
+    for (const l of cfg.lamps) {
+      const x = px(l.u);
+      const pool = ctx.createRadialGradient(x, deckY, 0, x, deckY, 60 * k);
+      pool.addColorStop(0, `rgba(${r},${g},${b},${0.20 * lvl})`);
+      pool.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = pool;
+      ctx.save();
+      ctx.translate(x, deckY);
+      ctx.scale(1, 0.34);            // flattened, so it lies on the boards
+      ctx.beginPath();
+      ctx.arc(0, 0, 60 * k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // warm spill from the windows and the doorway
+    for (const wn of cfg.windows) {
+      const x = px(wn.u), y = py(wn.v);
+      const hw = wn.w * rect.w * 0.5, hh = wn.h * rect.h * 0.5;
+      const gl = ctx.createRadialGradient(x, y, 0, x, y, Math.max(hw, hh) * 2.1);
+      gl.addColorStop(0, `rgba(255,206,138,${0.34 * lvl})`);
+      gl.addColorStop(0.5, `rgba(255,188,116,${0.13 * lvl})`);
+      gl.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gl;
+      ctx.fillRect(x - hw * 2.2, y - hh * 2.2, hw * 4.4, hh * 4.4);
+      ctx.fillStyle = `rgba(255,198,128,${0.30 * lvl})`;
+      ctx.fillRect(x - hw, y - hh, hw * 2, hh * 2);
+    }
+
+    // the lamps themselves: halo, then a small hot core
+    for (const l of cfg.lamps) {
+      const x = px(l.u), y = py(l.v);
+      const rr = 34 * k;
+      const halo = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      halo.addColorStop(0, `rgba(${r},${g},${b},${0.52 * lvl})`);
+      halo.addColorStop(0.4, `rgba(${r},${g},${b},${0.17 * lvl})`);
+      halo.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+      ctx.fillStyle = `rgba(255,244,214,${0.85 * lvl})`;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1, 2.1 * k), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const a of cfg.accents) {
+      const x = px(a.u), y = py(a.v), rr = 20 * k;
+      const gl = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      gl.addColorStop(0, `rgba(${a.tint[0]},${a.tint[1]},${a.tint[2]},${0.60 * lvl})`);
+      gl.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gl;
+      ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+    }
+
+    ctx.restore();
+  }
+
+  function drawPubLights(screenYOf, cyc) {
+    // On a little earlier and off a little later than the bike's headlight — a
+    // pub switches its veranda lights on while there's still colour in the sky.
+    const lvl = clamp((0.24 - cyc.sunAlt) / 0.30, 0, 1);
+    if (lvl < 0.02) return;
+    drawVerandaLights(
+      landmarkRect(PUB_START_X, screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare),
+      PUB_LIGHTS.mtDare, lvl);
+    drawVerandaLights(
+      landmarkRect(FINISH_DISTANCE, screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville),
+      PUB_LIGHTS.birdsville, lvl);
+  }
+
   // Returns true if the sprite handled the drawing, false to fall back to the
   // vector version below.
   // opts.align tilts the sprite to match the slope it is sitting on — wanted for
@@ -2188,6 +2317,7 @@
     applyDayTint(cyc);
     relightSky(cyc, t);
     drawBikeLights(cyc, t);
+    drawPubLights(screenYOf, cyc);
     drawCampGlow(screenYOf, t, cyc);
     drawFireworks(screenYOf);
 
