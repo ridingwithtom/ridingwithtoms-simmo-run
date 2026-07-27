@@ -513,10 +513,12 @@
   // Radial thickness of the rubber, as a fraction of wheel radius. The rim is
   // sized off this, so lowering it fattens the tyre and raising it slims it.
   const TYRE_INNER = 0.80;          // rubber spans TYRE_INNER*r .. r
-  // The carcass stops short of the full radius and only the knobs reach r, so the
-  // outline is scalloped. Filling it all the way to r gave a perfect circle, which
-  // is what made the tyre read as a road slick rather than a knobby.
-  const CARCASS_R = 0.925;
+  // Knobs read against a very dark outer band rather than against the background.
+  // Stopping the carcass short of r and letting only the knobs reach it did give a
+  // scalloped outline, but it also left half the outer band transparent, so the
+  // tyre looked see-through. The carcass is solid to r again and the tread comes
+  // from contrast: near-black notches between light blocks.
+  const TREAD_BAND = 0.95;          // outer band darkened to sit the knobs against
 
   // prep.py punches the whole wheel disc out of the photo so the spinning wheel
   // can be drawn procedurally, which also deletes the parts of the swingarm and
@@ -583,13 +585,21 @@
     // behind the spokes, where the desert should show through. The sprite has the
     // wheel punched clean out, so anything not drawn here is see-through.
     ctx.beginPath();
-    ctx.arc(0, 0, r * CARCASS_R, 0, Math.PI * 2);
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.arc(0, 0, r * TYRE_INNER, 0, Math.PI * 2, true);
     ctx.fillStyle = '#181713';
     ctx.fill();
 
+    // near-black band at the tread face, so the gaps between knobs read as deep
+    // grooves without any of the tyre going transparent
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r * TREAD_BAND, 0, Math.PI * 2, true);
+    ctx.fillStyle = '#0a0a09';
+    ctx.fill();
+
     // ---- chunky knobs: the main rotation cue ----
-    const knobInner = r * (TYRE_INNER + 0.03);
+    const knobInner = r * (TYRE_INNER + 0.02);
     for (let i = 0; i < KNOBS; i++) {
       const a = (i / KNOBS) * Math.PI * 2;
       const half = 0.20;
@@ -599,7 +609,7 @@
       ctx.lineTo(Math.cos(a + half * 0.86) * r, Math.sin(a + half * 0.86) * r);
       ctx.lineTo(Math.cos(a + half) * knobInner, Math.sin(a + half) * knobInner);
       ctx.closePath();
-      ctx.fillStyle = '#454138';
+      ctx.fillStyle = '#4d4941';
       ctx.fill();
     }
 
