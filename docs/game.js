@@ -1199,7 +1199,10 @@
     parkSign:   { h: 180, bed: 0 },
     stuckBike:  { h: 130, bed: 0.06, align: true },
     maccasSign: { h: 300, bed: 0.03 },
-    bogTiger:   { h: 150, bed: 0.17, align: true }
+    bogTiger:   { h: 150, bed: 0.17, align: true },
+    // His booted foot touches the bottom edge but the bare one sits 2.8% higher,
+    // so a small bed sinks him until both read as planted in the sand.
+    brendan:    { h: 210, bed: 0.028 }
   };
 
   function loadLandmark(file) {
@@ -1217,7 +1220,8 @@
     stuckBike:  loadLandmark('stuck-bike.png'),
     maccasSign: loadLandmark('maccas-sign.png'),
     eagle:      loadLandmark('eagle-sprite.png'),
-    bogTiger:   loadLandmark('tiger-sprite.png')
+    bogTiger:   loadLandmark('tiger-sprite.png'),
+    brendan:    loadLandmark('brendan-sprite.png')
   };
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
@@ -1226,6 +1230,10 @@
   // sign sits square instead of straddling a dune face.
   const PARK_SIGN_X = flattestNear(FINISH_DISTANCE * 0.20, 1200, 200);
   const STUCK_BIKE_X = BIG_RED_X - 670;   // ~halfway up the face
+  // Brendan is having a shoey on the crest. Biased past the peak so he's clear of
+  // the Big Red sign back down the climb, then settled on the most level sand
+  // within reach so he stands square rather than straddling the camber.
+  const BRENDAN_X = flattestNear(BIG_RED_X + 150, 180, 120);
   // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
   // the sign straddled a dune face with a 49px drop across its base.
   const MACCAS_X = flattestNear(FINISH_DISTANCE * 0.5, 1500, 140);
@@ -1999,6 +2007,7 @@
     drawLandmarkSprite(MACCAS_X, screenYOf, LANDMARKS.maccasSign, LANDMARK_SIZE.maccasSign);
     drawCamp(screenYOf, performance.now() * 0.001);
     drawPub(FINISH_DISTANCE, 'BIRDSVILLE PUB', screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville);
+    drawLandmarkSprite(BRENDAN_X, screenYOf, LANDMARKS.brendan, LANDMARK_SIZE.brendan);
     drawBigRedSign(screenYOf);
 
     // scrub
