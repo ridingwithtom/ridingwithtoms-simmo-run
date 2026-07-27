@@ -513,6 +513,10 @@
   // Radial thickness of the rubber, as a fraction of wheel radius. The rim is
   // sized off this, so lowering it fattens the tyre and raising it slims it.
   const TYRE_INNER = 0.80;          // rubber spans TYRE_INNER*r .. r
+  // The carcass stops short of the full radius and only the knobs reach r, so the
+  // outline is scalloped. Filling it all the way to r gave a perfect circle, which
+  // is what made the tyre read as a road slick rather than a knobby.
+  const CARCASS_R = 0.925;
 
   // prep.py punches the whole wheel disc out of the photo so the spinning wheel
   // can be drawn procedurally, which also deletes the parts of the swingarm and
@@ -545,10 +549,16 @@
     const rear = SPRITE.wheels[0], front = SPRITE.wheels[1];
 
     // swingarm: pivot side to rear axle, tapering in as real ones do
-    taperedBar(408, 652, rear.cx + 6, rear.cy + 2, 16, 11, '#adacaa', '#5e5e5c');
+    taperedBar(410, 652, rear.cx + 6, rear.cy + 2, 21, 15, '#a8a7a5', '#575755');
 
-    // fork slider down to the front axle
-    taperedBar(916, 452, front.cx - 4, front.cy - 6, 14, 11, '#e8e8e8', '#8d8d8d');
+    // Fork slider, on the gold tube's own centreline. Measured off the sprite: the
+    // gold runs at 27.5 degrees from vertical along x = 0.521*y + 643, and the disc
+    // punch cuts it at (898, 508). The first version started 34px to the right of
+    // that line, which is why it looked like a separate white bar rather than the
+    // bottom of the fork. Silver, not white — it's a slider, not a highlight.
+    taperedBar(906, 500, 975, 638, 15, 13, '#b7babe', '#6c6f73');
+    // short axle lug, since the fork axis passes just inboard of the wheel centre
+    taperedBar(975, 638, front.cx - 2, front.cy - 3, 13, 11, '#a9acb0', '#666a6e');
 
     // axle nuts, so the bars terminate on something
     for (const [cx, cy] of [[rear.cx, rear.cy], [front.cx, front.cy]]) {
@@ -573,20 +583,20 @@
     // behind the spokes, where the desert should show through. The sprite has the
     // wheel punched clean out, so anything not drawn here is see-through.
     ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r * CARCASS_R, 0, Math.PI * 2);
     ctx.arc(0, 0, r * TYRE_INNER, 0, Math.PI * 2, true);
     ctx.fillStyle = '#181713';
     ctx.fill();
 
     // ---- chunky knobs: the main rotation cue ----
-    const knobInner = r * (TYRE_INNER + 0.06);
+    const knobInner = r * (TYRE_INNER + 0.03);
     for (let i = 0; i < KNOBS; i++) {
       const a = (i / KNOBS) * Math.PI * 2;
-      const half = 0.16;
+      const half = 0.20;
       ctx.beginPath();
       ctx.moveTo(Math.cos(a - half) * knobInner, Math.sin(a - half) * knobInner);
-      ctx.lineTo(Math.cos(a - half * 0.6) * r, Math.sin(a - half * 0.6) * r);
-      ctx.lineTo(Math.cos(a + half * 0.6) * r, Math.sin(a + half * 0.6) * r);
+      ctx.lineTo(Math.cos(a - half * 0.86) * r, Math.sin(a - half * 0.86) * r);
+      ctx.lineTo(Math.cos(a + half * 0.86) * r, Math.sin(a + half * 0.86) * r);
       ctx.lineTo(Math.cos(a + half) * knobInner, Math.sin(a + half) * knobInner);
       ctx.closePath();
       ctx.fillStyle = '#454138';
@@ -605,21 +615,21 @@
     const rimMid = TYRE_INNER - rimWidth / 2;
     ctx.beginPath();
     ctx.arc(0, 0, r * rimMid, 0, Math.PI * 2);
-    ctx.strokeStyle = '#c8a24c';
+    ctx.strokeStyle = '#3f4347';
     ctx.lineWidth = r * rimWidth;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(0, 0, r * (rimMid + 0.024), 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(248,232,182,0.8)';
-    ctx.lineWidth = r * 0.018;
+    ctx.strokeStyle = 'rgba(150,158,166,0.45)';
+    ctx.lineWidth = r * 0.016;
     ctx.stroke();
 
     // ---- bold spokes, one accent ----
     const spokeOuter = rimMid - rimWidth / 2;
     for (let i = 0; i < SPOKES; i++) {
       const a = (i / SPOKES) * Math.PI * 2;
-      ctx.strokeStyle = i === 0 ? '#4a3a1e' : '#d8c79a';
-      ctx.lineWidth = i === 0 ? r * 0.062 : r * 0.034;
+      ctx.strokeStyle = i === 0 ? '#2a2d33' : '#121317';
+      ctx.lineWidth = i === 0 ? r * 0.055 : r * 0.030;
       ctx.beginPath();
       ctx.moveTo(Math.cos(a) * r * 0.16, Math.sin(a) * r * 0.16);
       ctx.lineTo(Math.cos(a) * r * spokeOuter, Math.sin(a) * r * spokeOuter);
@@ -631,7 +641,7 @@
     ctx.rotate(0.75);
     ctx.fillStyle = '#0f0e0c';
     ctx.beginPath();
-    ctx.roundRect(r * (rimMid - 0.16), -r * 0.05, r * 0.20, r * 0.10, r * 0.03);
+    ctx.roundRect(r * (rimMid - 0.072), -r * 0.019, r * 0.072, r * 0.038, r * 0.013);
     ctx.fill();
     ctx.restore();
 
