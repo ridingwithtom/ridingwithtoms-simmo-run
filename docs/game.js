@@ -153,10 +153,14 @@
   // the building rather than in front of it.
   const PUB_START_X = 0;
   const BIG_RED_X = 21200;
+  const CREEK_X = 18000;            // Eyre Creek, where the camel used to stand
+  const CREEK_HALF = 620;
+  const CREEK_DEPTH = 130;
   const FINISH_DISTANCE = 24000;
   const TOTAL_DUNES = 1200;
 
-  const RIDE_SPEED = 430;          // fixed forward speed (world px/sec)
+  const RIDE_SPEED = 430;          // forward speed on dry sand (world px/sec)
+  const WATER_DRAG = 0.46;         // share of speed lost at full wading depth
   const FUEL_START = 78;           // seconds — enough for the run plus ~3 stacks
   const CRASH_FUEL_PENALTY = 5;
   const CRASH_RECOVERY_TIME = 1.4;
@@ -198,8 +202,42 @@
     return 560 * Math.exp(-d * d);
   }
 
+  // Eyre Creek: a channel cut into the desert, three quarters of the way across.
+  // exp(-d^4) rather than exp(-d^2) gives a flat bed with defined banks instead of
+  // a smooth bowl, which is what a creek crossing actually looks like — and it
+  // keeps the banks gentle enough to wheelie down and back out of.
+  function eyreCreek(x) {
+    const d = (x - CREEK_X) / CREEK_HALF;
+    const d2 = d * d;
+    return -CREEK_DEPTH * Math.exp(-d2 * d2);
+  }
+
   function nearTerrain(x) {
-    return baseTerrain(x) * padFactor(x) + bigRed(x);
+    return baseTerrain(x) * padFactor(x) + bigRed(x) + eyreCreek(x);
+  }
+
+  // ---------- Eyre Creek water ----------
+  // The surface sits a fixed height above the bed, and the shores are wherever the
+  // ground climbs back through it. Found by scanning rather than assumed, because
+  // the base terrain runs under the channel and shifts both banks a little.
+  const WATER_RISE = 74;                       // depth over the middle of the bed
+  const WATER_Y = nearTerrain(CREEK_X) + WATER_RISE;
+
+  function findShore(dir) {
+    let x = CREEK_X;
+    for (let i = 0; i < 400; i++) {
+      x += dir * 4;
+      if (nearTerrain(x) >= WATER_Y) break;
+    }
+    return x;
+  }
+  const SHORE_L = findShore(-1);
+  const SHORE_R = findShore(1);
+
+  // How submerged the bed is beneath the surface at x, 0..1. Drives both the drag
+  // on the bike and how the water is drawn.
+  function waterDepthFrac(x) {
+    return clamp((WATER_Y - nearTerrain(x)) / WATER_RISE, 0, 1);
   }
 
   // A band of country between the far ridge and the dunes you ride on, so
@@ -465,7 +503,10 @@
 
   function spawnDust(worldX, worldY, strength) {
     if (dust.length >= DUST_MAX) return;
+    // in the creek the rear wheel throws water, not sand
+    const wet = WATER_Y - nearTerrain(worldX) > 12;
     dust.push({
+      wet,
       wx: worldX + (Math.random() - 0.5) * 10,
       wy: worldY + (Math.random() - 0.5) * 4,
       vx: -30 - Math.random() * 70 * strength,
@@ -495,7 +536,9 @@
       const sy = screenYOf(p.wy);
       ctx.beginPath();
       ctx.arc(sx, sy, p.size * (1 + t * 1.6), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(198,116,64,${0.55 * (1 - t)})`;
+      ctx.fillStyle = p.wet
+        ? `rgba(196,226,224,${0.62 * (1 - t)})`
+        : `rgba(198,116,64,${0.55 * (1 - t)})`;
       ctx.fill();
     }
   }
@@ -813,7 +856,9 @@
   // ---------- the camel ----------
   // Feral dromedaries are all over the Simpson, so one stands on the near ground
   // three quarters of the way across, chewing and watching you go by.
-  const CAMEL_X = FINISH_DISTANCE * 0.75;
+  // Between the bogged tiger (26%) and the Maccas sign (50%). It used to stand at
+  // 75%, which is now the middle of Eyre Creek.
+  const CAMEL_X = FINISH_DISTANCE * 0.38;
   const CAMEL_H = 112;   // smaller, since it now stands part-way into the distance
 
   function drawCamel(t) {
@@ -1752,6 +1797,7 @@
     crashes: 0,
     arriveTimer: 0,
     rocketTimer: 0,
+    speed: RIDE_SPEED,
     fuel: FUEL_START,
     elapsed: 0,
     startFrame: 1,     // 1 on the title screen, eased to 0 once riding
@@ -1786,6 +1832,7 @@
     state.arriveTimer = 0;
     state.rocketTimer = 0;
     fw.rockets.length = fw.sparks.length = fw.flashes.length = 0;
+    state.speed = RIDE_SPEED;
     state.fuel = FUEL_START;
     state.elapsed = 0;
     keys.ArrowUp = keys.ArrowDown = false;
@@ -1886,7 +1933,11 @@
     }
 
     // fixed forward speed — the rider only manages pitch
-    state.cameraX += RIDE_SPEED * dt;
+    // Water drags: speed falls off smoothly with how deep the crossing is, so the
+    // bike slows entering Eyre Creek and picks up again climbing out. It costs fuel,
+    // which is the point — the creek is time you don't get back.
+    state.speed = RIDE_SPEED * (1 - WATER_DRAG * waterDepthFrac(state.cameraX));
+    state.cameraX += state.speed * dt;
 
     if (state.cameraX >= state.stopX) {
       // Pull up in front of the pub and let the town carry on for a moment before
@@ -1923,7 +1974,7 @@
     const elevNow = nearTerrain(state.cameraX);
     if (state.prevElev === null) state.prevElev = elevNow;
     const dElev = elevNow - state.prevElev;
-    const slope = dElev / Math.max(1e-6, RIDE_SPEED * dt);
+    const slope = dElev / Math.max(1e-6, state.speed * dt);
 
     if (dElev > 0) {
       state.climbAccum += dElev;
@@ -1937,7 +1988,7 @@
         state.airborne = true;
         state.angleVel = state.pitchVel;
         const strength = Math.min(state.climbAccum, 420);
-        state.airVel = 70 + strength * 2.0 + RIDE_SPEED * 0.25;
+        state.airVel = 70 + strength * 2.0 + state.speed * 0.25;
       }
       state.climbAccum = 0;
       state.climbPeakSlope = 0;
@@ -2029,7 +2080,7 @@
     }
     updateDust(dt);
 
-    wheelSpin += (RIDE_SPEED / WHEEL_WORLD_R) * SPIN_READABILITY * dt;
+    wheelSpin += (state.speed / WHEEL_WORLD_R) * SPIN_READABILITY * dt;
 
   }
 
@@ -2355,6 +2406,8 @@
       const r = hash(bx * 0.13 + 7);
       if (r <= 0.45) continue;
       const wx = bx + hash(bx * 0.37) * spacing;
+      // saltbush doesn't grow on a creek bed; leave a few at the shallow margins
+      if (WATER_Y - nearTerrain(wx) > 22) continue;
       const sx = (wx - state.cameraX) + W * BIKE_SCREEN_FRAC;
       const sy = screenYOf(nearTerrain(wx));
       const s = 7 + r * 8;
@@ -2371,6 +2424,130 @@
     }
 
     return screenYOf;
+  }
+
+  // ---------- Eyre Creek: fish and water ----------
+  // Fish are drawn before the bike and the water, the water after both. That order
+  // is what makes the crossing read: the surface is translucent, so the bed, the
+  // fish and the submerged half of the bike are all seen *through* it, and the
+  // waterline crosses the bike at exactly the right height without any masking.
+  const FISH = [];
+  const FISH_COLOURS = [
+    [188, 158, 96], [150, 172, 120], [206, 176, 120], [130, 150, 148]
+  ];
+  (function stockTheCreek() {
+    const span = SHORE_R - SHORE_L;
+    for (let i = 0; i < 9; i++) {
+      const home = SHORE_L + span * (0.12 + 0.76 * ((i + 0.5) / 9));
+      FISH.push({
+        home,
+        range: 70 + hash(i * 3.1) * 130,
+        phase: hash(i * 7.7) * Math.PI * 2,
+        rate: 0.22 + hash(i * 5.3) * 0.30,
+        // sit them between the bed and the surface, deeper fish a touch bigger
+        depth: 0.22 + hash(i * 11.9) * 0.55,
+        len: 17 + hash(i * 2.3) * 14,
+        colour: FISH_COLOURS[(hash(i * 13.7) * FISH_COLOURS.length) | 0]
+      });
+    }
+  })();
+
+  function drawFish(screenYOf, t) {
+    if (state.cameraX < SHORE_L - W || state.cameraX > SHORE_R + W) return;
+    for (const f of FISH) {
+      const swim = Math.sin(t * f.rate + f.phase);
+      const wx = f.home + swim * f.range;
+      const sx = (wx - state.cameraX) + W * BIKE_SCREEN_FRAC;
+      if (sx < -40 || sx > W + 40) continue;
+
+      const bed = nearTerrain(wx);
+      if (bed >= WATER_Y - 6) continue;                 // too shallow here
+      const wy = bed + (WATER_Y - bed) * f.depth;
+      const sy = screenYOf(wy) + Math.sin(t * 1.7 + f.phase) * 1.6;
+
+      // heading follows the swim direction
+      const dir = Math.cos(t * f.rate + f.phase) >= 0 ? 1 : -1;
+      const wag = Math.sin(t * 7 + f.phase) * 0.35;
+      const L = f.len, [r, g, b] = f.colour;
+
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.scale(dir, 1);
+      ctx.globalAlpha = 0.88;
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, L * 0.5, L * 0.22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // tail
+      ctx.beginPath();
+      ctx.moveTo(-L * 0.44, 0);
+      ctx.lineTo(-L * 0.78, -L * 0.20 + wag * L * 0.2);
+      ctx.lineTo(-L * 0.78, L * 0.20 + wag * L * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      // a paler flank so it reads at size
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = `rgb(${Math.min(255, r + 45)},${Math.min(255, g + 45)},${Math.min(255, b + 40)})`;
+      ctx.beginPath();
+      ctx.ellipse(L * 0.06, -L * 0.05, L * 0.30, L * 0.09, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawWater(screenYOf, t) {
+    const left = SHORE_L - 30, right = SHORE_R + 30;
+    if (right - state.cameraX + W * BIKE_SCREEN_FRAC < -40) return;
+    if (left - state.cameraX + W * BIKE_SCREEN_FRAC > W + 40) return;
+
+    const sxOf = (wx) => (wx - state.cameraX) + W * BIKE_SCREEN_FRAC;
+    const surfaceY = screenYOf(WATER_Y);
+
+    // Body of water: along the surface, then back along the bed. Filling between
+    // the two clips the water to the channel without any separate mask.
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(sxOf(left), surfaceY);
+    ctx.lineTo(sxOf(right), surfaceY);
+    for (let wx = right; wx >= left; wx -= 12) {
+      ctx.lineTo(sxOf(wx), screenYOf(Math.min(nearTerrain(wx), WATER_Y)));
+    }
+    ctx.closePath();
+
+    const deepY = screenYOf(nearTerrain(CREEK_X));
+    const grad = ctx.createLinearGradient(0, surfaceY, 0, deepY);
+    grad.addColorStop(0, 'rgba(104,168,164,0.30)');
+    grad.addColorStop(0.45, 'rgba(58,124,128,0.50)');
+    grad.addColorStop(1, 'rgba(22,62,74,0.70)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
+
+    // surface line, with a little chop
+    ctx.save();
+    ctx.beginPath();
+    for (let wx = left; wx <= right; wx += 8) {
+      const ripple = Math.sin(wx * 0.05 + t * 2.2) * 1.2 + Math.sin(wx * 0.13 - t * 3.1) * 0.7;
+      const y = surfaceY + ripple;
+      if (wx === left) ctx.moveTo(sxOf(wx), y); else ctx.lineTo(sxOf(wx), y);
+    }
+    ctx.strokeStyle = 'rgba(198,228,228,0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // glints skating along the surface
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 16; i++) {
+      const wx = left + ((i * 137.5 + t * 26) % (right - left));
+      const len = 8 + hash(i * 3.7) * 22;
+      ctx.strokeStyle = `rgba(210,238,236,${0.10 + hash(i * 9.1) * 0.16})`;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(sxOf(wx), surfaceY + Math.sin(wx * 0.05 + t * 2.2) * 1.2);
+      ctx.lineTo(sxOf(wx + len), surfaceY + Math.sin((wx + len) * 0.05 + t * 2.2) * 1.2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawTheBike(screenYOf) {
@@ -2522,7 +2699,9 @@
     drawMidLayer(t);
     const screenYOf = drawNearLayer();
     drawDust(screenYOf);
+    drawFish(screenYOf, t);
     drawTheBike(screenYOf);
+    drawWater(screenYOf, t);
 
     // one light over the whole scene, then the fire on top of it
     applyDayTint(cyc);

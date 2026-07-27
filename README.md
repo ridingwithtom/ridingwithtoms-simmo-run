@@ -7,6 +7,11 @@ One crossing is one day: the run opens before dawn with the stars still out, the
 sun climbs to noon around the Maccas sign, sets behind Big Red, and you roll into
 Birdsville under a full moon with the pub letting off fireworks.
 
+Three quarters of the way across you drop into Eyre Creek and wade through it. The
+water is translucent, so the bed, the fish and the submerged half of the bike all
+show through it, and it drags the bike down to a little over half speed — which
+costs you fuel you don't get back.
+
 ## Controls
 
 | | Keyboard | Touch |
