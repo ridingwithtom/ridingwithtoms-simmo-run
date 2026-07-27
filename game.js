@@ -196,10 +196,23 @@
     return 1 - 0.94 * Math.max(a, b);
   }
 
-  // Big Red: one enormous dune just before town
+  // Big Red: one enormous dune just before town.
+  //
+  // Height and width are doubled together on purpose. Doubling the height alone
+  // takes the steepest part of the face from 0.86 to 1.39 — a 54 degree wall you
+  // can't ride up. Widening with it keeps the gradient at 0.76.
+  //
+  // padFactor is applied here as well as to the base terrain, which it wasn't
+  // before. At the old width Big Red contributed 0.03px at the finish line, so it
+  // didn't matter; at this width it reaches town and left the ground under the
+  // Birdsville pub varying by 95px, which would have the building visibly tilted
+  // and one end hanging in the air. Damped, that's 5.7px — flatter than it was.
+  const BIG_RED_H = 1120;
+  const BIG_RED_SIGMA = 1800;
+
   function bigRed(x) {
-    const d = (x - BIG_RED_X) / 900;
-    return 560 * Math.exp(-d * d);
+    const d = (x - BIG_RED_X) / BIG_RED_SIGMA;
+    return BIG_RED_H * Math.exp(-d * d) * padFactor(x);
   }
 
   // Eyre Creek: a channel cut into the desert, three quarters of the way across.
@@ -215,6 +228,18 @@
   function nearTerrain(x) {
     return baseTerrain(x) * padFactor(x) + bigRed(x) + eyreCreek(x);
   }
+
+  // The summit doesn't sit at BIG_RED_X: the base terrain runs underneath and pulls
+  // it to one side, and by how much depends on the dune's width. Everything staged
+  // on the dune is placed off this rather than off the nominal centre.
+  const BIG_RED_CREST = (() => {
+    let best = BIG_RED_X, peak = -Infinity;
+    for (let x = BIG_RED_X - 2 * BIG_RED_SIGMA; x <= BIG_RED_X + 2 * BIG_RED_SIGMA; x += 4) {
+      const y = baseTerrain(x) * padFactor(x) + bigRed(x);
+      if (y > peak) { peak = y; best = x; }
+    }
+    return best;
+  })();
 
   // ---------- Eyre Creek water ----------
   // The surface sits a fixed height above the bed, and the shores are wherever the
@@ -1359,14 +1384,23 @@
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
   // some poor bugger is bogged halfway up the face of Big Red.
-  // A fifth of the way in, on the most level sand nearby so the flat-bottomed
-  // sign sits square instead of straddling a dune face.
-  const PARK_SIGN_X = flattestNear(FINISH_DISTANCE * 0.20, 1200, 200);
-  const STUCK_BIKE_X = BIG_RED_X - 670;   // ~halfway up the face
+  // On the first dune. The start apron holds the ground flat for the first thousand
+  // px or so, then the terrain rises into its first proper crest — found by scanning
+  // for it rather than hardcoded, so it stays put if the terrain is ever retuned.
+  const FIRST_DUNE_X = (() => {
+    for (let x = 1000; x < 6000; x += 6) {
+      const a = nearTerrain(x - 6), b = nearTerrain(x), c = nearTerrain(x + 6);
+      if (b > a && b >= c && b > 40) return x;
+    }
+    return 1500;
+  })();
+  const PARK_SIGN_X = flattestNear(FIRST_DUNE_X, 90, 200);
+  const STUCK_BIKE_X = BIG_RED_CREST - 1500;   // ~halfway up the face by height
   // Brendan is having a shoey on the crest. Biased past the peak so he's clear of
   // the Big Red sign back down the climb, then settled on the most level sand
   // within reach so he stands square rather than straddling the camber.
-  const BRENDAN_X = flattestNear(BIG_RED_X + 150, 180, 120);
+  const BIG_RED_SIGN_X = BIG_RED_CREST - 700;
+  const BRENDAN_X = flattestNear(BIG_RED_CREST + 220, 180, 120);
   // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
   // the sign straddled a dune face with a 49px drop across its base.
   const MACCAS_X = flattestNear(FINISH_DISTANCE * 0.5, 1500, 140);
@@ -1644,14 +1678,16 @@
       if (sx + drawW / 2 < -80 || sx - drawW / 2 > W + 80) continue;
 
       const mh = drawW * GUM_MOUND_FRAC;
-      // Seat on the highest ground under the mound so no part of it hangs in the
-      // air, and lean with the bank. River gums on a creek bank do lean, so this is
-      // free realism — but only part way, or the trunk looks blown over.
-      let seat = -Infinity;
-      for (let i = -4; i <= 4; i++) seat = Math.max(seat, nearTerrain(g.x + (i / 4) * mh));
+      // Lay the mound along the chord between the ground at each end of it, and
+      // seat it at the chord's midpoint. Tilting only part way and seating on the
+      // highest point left a deep wedge of air under the low end, and the sand
+      // filling it ended in a vertical wall where the drift stopped. Along the
+      // chord the ends meet the sand exactly and only the terrain's curvature in
+      // between is left to fill. Gums on a creek bank lean anyway; the clamp just
+      // stops one looking blown over on a steep pitch.
       const yL = nearTerrain(g.x - mh), yR = nearTerrain(g.x + mh);
-      const tilt = Math.atan2(-(yR - yL), 2 * mh) * 0.55;
-      const groundY = screenYOf(seat);
+      const tilt = clamp(Math.atan2(-(yR - yL), 2 * mh), -0.26, 0.26);
+      const groundY = screenYOf((yL + yR) / 2);
       const cos = Math.cos(tilt), sin = Math.sin(tilt);
 
       ctx.save();
@@ -1677,10 +1713,15 @@
       for (let i = -12; i <= 12; i++) {
         const u = (i / 12) * span;
         const screenX = sx + u * cos;
-        const k = 1 - (u / span) * (u / span);
-        top.push([screenX, baseY(u) - 3 - hump * k * k]);
+        const k = 1 - (u / span) * (u / span);         // 1 at the trunk, 0 at the ends
         const groundHere = screenYOf(nearTerrain(g.x + u));
-        bottom.push([screenX, Math.max(baseY(u), groundHere)]);
+        const bottomY = Math.max(baseY(u), groundHere);
+        // Pull the crown of the drift down to meet the ground at the ends. Without
+        // this the drift keeps its full height right to its edge and stops dead,
+        // which reads as a retaining wall cut into the dune.
+        const crown = Math.min(baseY(u), groundHere) - 3 - hump * k * k;
+        top.push([screenX, bottomY + (crown - bottomY) * k]);
+        bottom.push([screenX, bottomY]);
       }
       ctx.beginPath();
       ctx.moveTo(top[0][0], top[0][1]);
@@ -1713,8 +1754,8 @@
   }
 
   function drawBigRedSign(screenYOf) {
-    if (drawLandmarkSprite(BIG_RED_X - 300, screenYOf, LANDMARKS.bigRed, LANDMARK_SIZE.bigRed)) return;
-    const signX = BIG_RED_X - 300;   // sits on the climb, clear of the rider
+    if (drawLandmarkSprite(BIG_RED_SIGN_X, screenYOf, LANDMARKS.bigRed, LANDMARK_SIZE.bigRed)) return;
+    const signX = BIG_RED_SIGN_X;   // sits on the climb, clear of the rider
     const sx = (signX - state.cameraX) + W * BIKE_SCREEN_FRAC;
     if (sx < -200 || sx > W + 200) return;
     const groundY = screenYOf(nearTerrain(signX));
