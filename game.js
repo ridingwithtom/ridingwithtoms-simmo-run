@@ -1245,12 +1245,12 @@
   // Where a landmark sprite actually lands on screen, in the same terms
   // drawLandmarkSprite uses to blit it. Lets a later additive pass place glows at
   // fixed points on the artwork and have them track the building as it scrolls.
-  function landmarkRect(worldX, screenYOf, lm, cfg) {
+  function landmarkRect(worldX, screenYOf, lm, cfg, dx) {
     if (!lm || !lm.ready || !lm.img.naturalHeight) return null;
     const h = cfg.h;
     const scale = h / lm.img.naturalHeight;
     const w = lm.img.naturalWidth * scale;
-    const sx = (worldX - state.cameraX) + W * BIKE_SCREEN_FRAC;
+    const sx = (worldX - state.cameraX) + W * BIKE_SCREEN_FRAC + (dx || 0);
     if (sx + w / 2 < -60 || sx - w / 2 > W + 60) return null;
     const groundY = screenYOf(nearTerrain(worldX));
     return { x: sx - w / 2, y: groundY - h + h * (cfg.bed || 0), w, h };
@@ -1364,7 +1364,7 @@
     const lvl = clamp((0.24 - cyc.sunAlt) / 0.30, 0, 1);
     if (lvl < 0.02) return;
     drawVerandaLights(
-      landmarkRect(PUB_START_X, screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare),
+      landmarkRect(PUB_START_X, screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare, state.pubDX),
       PUB_LIGHTS.mtDare, lvl);
     drawVerandaLights(
       landmarkRect(FINISH_DISTANCE, screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville),
@@ -1376,10 +1376,10 @@
   // opts.align tilts the sprite to match the slope it is sitting on — wanted for
   // something lying in the sand, but not for buildings or signs, which stay
   // upright however steep the dune is.
-  function drawLandmarkSprite(worldX, screenYOf, lm, cfg) {
+  function drawLandmarkSprite(worldX, screenYOf, lm, cfg, dx) {
     if (!lm || !lm.ready || !lm.img.naturalHeight) return false;
     const targetH = cfg.h;
-    const sx = (worldX - state.cameraX) + W * BIKE_SCREEN_FRAC;
+    const sx = (worldX - state.cameraX) + W * BIKE_SCREEN_FRAC + (dx || 0);
     const scale = targetH / lm.img.naturalHeight;
     const drawW = lm.img.naturalWidth * scale;
     if (sx + drawW / 2 < -60 || sx - drawW / 2 > W + 60) return true;   // off screen
@@ -1408,8 +1408,8 @@
   }
 
   // ---------- pubs & signage ----------
-  function drawPub(worldX, label, screenYOf, lm, cfg) {
-    if (drawLandmarkSprite(worldX, screenYOf, lm, cfg)) return;
+  function drawPub(worldX, label, screenYOf, lm, cfg, dx) {
+    if (drawLandmarkSprite(worldX, screenYOf, lm, cfg, dx)) return;
     const sx = (worldX - state.cameraX) + W * BIKE_SCREEN_FRAC;
     if (sx < -320 || sx > W + 320) return;
     const groundY = screenYOf(nearTerrain(worldX));
@@ -1507,16 +1507,45 @@
   // the start (and of Birdsville on arrival).
   const BIKE_SCREEN_FRAC = 0.5;
 
-  // The hotel and the bike occupy the same world position at the start line, so
-  // on the title screen the bike is drawn to the right of centre to stand beside
-  // the building instead of inside it. Eased back to zero once you set off, so
-  // there's no jump. Capped by the screen width, because in portrait the hotel is
-  // most of the frame and a fixed nudge would push the bike off the right edge.
-  const START_SHIFT = 300;
+  // The hotel and the bike share a world position at the start line, so the title
+  // screen lays them out as a pair in screen space instead: hotel on the left,
+  // bike beside it, both wholly in frame. Both offsets ease to zero once you set
+  // off, so the scene settles into its riding framing without a jump.
   const START_SHIFT_EASE = 2.6;      // per second
 
-  function startShiftTarget() {
-    return Math.min(START_SHIFT, Math.max(0, W * 0.5 - 130));
+  // The sprite is pinned by a contact point, not its middle, so its extents have
+  // to come from the geometry rather than being assumed symmetric about the anchor.
+  const BIKE_DRAW_W = SPRITE.w * SPRITE_SCALE;
+  const BIKE_ANCHOR_TO_LEFT = HALF_WHEELBASE + SPRITE.rearX * SPRITE_SCALE;
+  const TITLE_GAP = 16;
+
+  function titleLayout() {
+    const lm = LANDMARKS.mtDare;
+    const pubH = LANDMARK_SIZE.mtDare.h;
+    const pubW = (lm && lm.ready && lm.img.naturalHeight)
+      ? lm.img.naturalWidth * (pubH / lm.img.naturalHeight)
+      : pubH * 2.4;                      // nominal until the sprite has loaded
+    const groupW = pubW + TITLE_GAP + BIKE_DRAW_W;
+    const spare = W - groupW;
+
+    // On a phone in portrait the pair only just fits, so this lands the hotel hard
+    // against the left edge. Given room it eases toward centring the group, rather
+    // than leaving the whole right half of a desktop window empty.
+    const left = spare * clamp((spare - 20) / 120, 0, 0.5);
+    const pubCentre = left + pubW / 2;
+    const bikeAnchor = left + pubW + TITLE_GAP + BIKE_ANCHOR_TO_LEFT;
+    return {
+      pubDX: pubCentre - W * BIKE_SCREEN_FRAC,
+      bikeDX: bikeAnchor - W * BIKE_SCREEN_FRAC
+    };
+  }
+
+  // Resolved once per frame so the hotel, its veranda lights and the bike can't
+  // disagree about where they are.
+  function applyTitleLayout() {
+    const lay = titleLayout();
+    state.pubDX = lay.pubDX * state.startFrame;
+    state.bikeDX = lay.bikeDX * state.startFrame;
   }
 
   // The bike is nearly inverted before it lets go — very forgiving on angle.
@@ -1583,7 +1612,9 @@
     rocketTimer: 0,
     fuel: FUEL_START,
     elapsed: 0,
-    startShift: 0
+    startFrame: 1,     // 1 on the title screen, eased to 0 once riding
+    pubDX: 0,
+    bikeDX: 0
   };
 
   function resetRun() {
@@ -1595,7 +1626,7 @@
     state.pitch = 0;
     state.pitchVel = 0;
     state.leanInput = 0;
-    state.startShift = startShiftTarget();
+    state.startFrame = 1;
     state.airY = 0;
     state.airVel = 0;
     state.airborne = false;
@@ -1712,8 +1743,8 @@
     }
 
     let leanTarget = 0;
-    state.startShift += (0 - state.startShift) * Math.min(1, dt * START_SHIFT_EASE);
-    if (Math.abs(state.startShift) < 0.5) state.startShift = 0;
+    state.startFrame += (0 - state.startFrame) * Math.min(1, dt * START_SHIFT_EASE);
+    if (state.startFrame < 0.002) state.startFrame = 0;
 
     if (keys.ArrowUp) leanTarget += 1;
     if (keys.ArrowDown) leanTarget -= 1;
@@ -2127,7 +2158,7 @@
     ctx.setLineDash([]);
     ctx.restore();
 
-    drawPub(PUB_START_X, 'MT DARE HOTEL', screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare);
+    drawPub(PUB_START_X, 'MT DARE HOTEL', screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare, state.pubDX);
     drawLandmarkSprite(PARK_SIGN_X, screenYOf, LANDMARKS.parkSign, LANDMARK_SIZE.parkSign);
     drawLandmarkSprite(STUCK_BIKE_X, screenYOf, LANDMARKS.stuckBike, LANDMARK_SIZE.stuckBike);
     drawBogSand(screenYOf, false);
@@ -2164,7 +2195,7 @@
   }
 
   function drawTheBike(screenYOf) {
-    const bikeScreenX = W * BIKE_SCREEN_FRAC + state.startShift;
+    const bikeScreenX = W * BIKE_SCREEN_FRAC + state.bikeDX;
     const ground = chassisAt(state.cameraX);
     const centreGroundY = screenYOf((ground.yRear + ground.yFront) / 2);
 
@@ -2291,10 +2322,10 @@
 
     if (state.mode === 'riding') update(dt);
     else if (state.mode === 'arriving') updateArrival(dt);
-    // Recomputed each frame while the title is up rather than set once: resetRun
-    // never runs at startup, and the cap depends on a width that can change under
-    // us when the phone is rotated.
-    else if (state.mode === 'title') state.startShift = startShiftTarget();
+    // Held at full while the title is up: resetRun never runs at startup, and the
+    // layout depends on a width that can change under us when the phone is turned.
+    else if (state.mode === 'title') state.startFrame = 1;
+    applyTitleLayout();
 
     // camera tracks ground height so the huge dunes read properly
     const target = nearTerrain(state.cameraX);
