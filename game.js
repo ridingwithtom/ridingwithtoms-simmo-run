@@ -1057,7 +1057,11 @@
   // ---------- wedge-tailed eagle ----------
   // Soars past about a quarter of the way across, on its own slow parallax so it
   // reads as high up rather than nearby.
-  const EAGLE_X = FINISH_DISTANCE * 0.25;
+  // Between the Maccas sign at half way and Eyre Creek. CREEK_X is an absolute
+  // position while the Maccas sign tracks the course length, so this is written as
+  // the midpoint of the two rather than as a fraction that would drift apart from
+  // them if the run were lengthened again.
+  const EAGLE_X = (FINISH_DISTANCE * 0.5 + CREEK_X) / 2;
   const EAGLE_PARALLAX = 0.45;
   const EAGLE_H = 150;            // on-screen wingspan height
 
@@ -1380,7 +1384,9 @@
   const LANDMARK_SIZE = {
     mtDare:     { h: 250, bed: 0 },
     birdsville: { h: 250, bed: 0.13 },
-    bigRed:     { h: 200, bed: 0 },
+    // Laid along the dune face: upright, its downhill post would hang 65px clear of
+    // the sand. Signs on Big Red lean in real life for the same reason.
+    bigRed:     { h: 200, bed: 0.05, align: true },
     parkSign:   { h: 180, bed: 0 },
     stuckBike:  { h: 130, bed: 0.06, align: true },
     maccasSign: { h: 300, bed: 0.03 },
@@ -1436,22 +1442,24 @@
     }
     return 1500 + n * 400;
   }
-  const PARK_SIGN_X = flattestNear(duneCrest(2), 90, 200);
-  const STUCK_BIKE_X = BIG_RED_CREST - 1500;   // ~halfway up the face by height
+  // The sign is a flat-bottomed board on two posts, so a rounded crest leaves it
+  // see-sawing on the hump. Widening the search to 900 lets it reach the flat shelf
+  // on the dune's approach, where the ground varies 2.7px across the sign's width
+  // against 31px on the crest itself. The footprint is 290 because the sign is 276
+  // wide at h=180 — judging the ground over 200 was measuring the wrong span.
+  const PARK_SIGN_X = flattestNear(duneCrest(2), 900, 290);
+  // The KTM moves up into the top half of the climb, and the sign takes the spot it
+  // vacates part way up the face.
+  const STUCK_BIKE_X = BIG_RED_CREST - 750;
   // Brendan is having a shoey on the crest. Biased past the peak so he's clear of
   // the Big Red sign back down the climb, then settled on the most level sand
   // within reach so he stands square rather than straddling the camber.
-  // At the foot of the dune rather than partway up it: the last stretch of low
-  // ground before the face starts to climb, found as the point where Big Red's own
-  // contribution first lifts the ground about 90px. Nothing else stands between
-  // there and the summit, so it reads as the sign for the climb ahead.
-  const BIG_RED_SIGN_X = (() => {
-    for (let x = BIG_RED_CREST - 4000; x < BIG_RED_CREST; x += 10) {
-      const d = (x - BIG_RED_X) / BIG_RED_SIGMA;
-      if (BIG_RED_H * Math.exp(-d * d) >= 90) return flattestNear(x, 140, 200);
-    }
-    return BIG_RED_CREST - 2600;
-  })();
+  // Exactly where the KTM used to sit, part way up the face. No flattest-ground
+  // search here: now the dune is smooth its face has no level spots at all — every
+  // position drops 60 to 120px across the sign's width — so the sign is laid along
+  // the slope instead (align, below) rather than hunted for flat sand that isn't
+  // there.
+  const BIG_RED_SIGN_X = BIG_RED_CREST - 1500;
   const BRENDAN_X = flattestNear(BIG_RED_CREST + 220, 180, 120);
   // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
   // the sign straddled a dune face with a 49px drop across its base.
