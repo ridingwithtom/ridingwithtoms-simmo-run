@@ -1364,7 +1364,7 @@
     const lvl = clamp((0.24 - cyc.sunAlt) / 0.30, 0, 1);
     if (lvl < 0.02) return;
     drawVerandaLights(
-      landmarkRect(PUB_START_X, screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare, state.pubDX),
+      landmarkRect(PUB_START_X, screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare, state.startPubDX),
       PUB_LIGHTS.mtDare, lvl);
     drawVerandaLights(
       landmarkRect(FINISH_DISTANCE, screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville),
@@ -1517,35 +1517,98 @@
   // to come from the geometry rather than being assumed symmetric about the anchor.
   const BIKE_DRAW_W = SPRITE.w * SPRITE_SCALE;
   const BIKE_ANCHOR_TO_LEFT = HALF_WHEELBASE + SPRITE.rearX * SPRITE_SCALE;
-  const TITLE_GAP = 16;
+  const PAIR_GAP = 16;
+  const ARRIVE_APPROACH = 900;       // world px over which the ending reframes
+
+  function landmarkDrawnW(lm, cfg) {
+    return (lm && lm.ready && lm.img.naturalHeight)
+      ? lm.img.naturalWidth * (cfg.h / lm.img.naturalHeight)
+      : cfg.h * 2.4;                   // nominal until the sprite has loaded
+  }
+
+  // How far in from the edge the pair sits. Where they only just fit this is near
+  // enough to zero, which hugs the edge; given room it grows to half the slack,
+  // which centres the group instead of leaving half a desktop window empty.
+  // Smooth in between, so resizing never makes the scene jump.
+  function pairInset(groupW) {
+    const spare = W - groupW;
+    return spare * clamp((spare - 20) / 120, 0, 0.5);
+  }
 
   function titleLayout() {
-    const lm = LANDMARKS.mtDare;
-    const pubH = LANDMARK_SIZE.mtDare.h;
-    const pubW = (lm && lm.ready && lm.img.naturalHeight)
-      ? lm.img.naturalWidth * (pubH / lm.img.naturalHeight)
-      : pubH * 2.4;                      // nominal until the sprite has loaded
-    const groupW = pubW + TITLE_GAP + BIKE_DRAW_W;
-    const spare = W - groupW;
-
-    // On a phone in portrait the pair only just fits, so this lands the hotel hard
-    // against the left edge. Given room it eases toward centring the group, rather
-    // than leaving the whole right half of a desktop window empty.
-    const left = spare * clamp((spare - 20) / 120, 0, 0.5);
-    const pubCentre = left + pubW / 2;
-    const bikeAnchor = left + pubW + TITLE_GAP + BIKE_ANCHOR_TO_LEFT;
+    const pubW = landmarkDrawnW(LANDMARKS.mtDare, LANDMARK_SIZE.mtDare);
+    const left = pairInset(pubW + PAIR_GAP + BIKE_DRAW_W);
     return {
-      pubDX: pubCentre - W * BIKE_SCREEN_FRAC,
-      bikeDX: bikeAnchor - W * BIKE_SCREEN_FRAC
+      pubDX: (left + pubW / 2) - W * BIKE_SCREEN_FRAC,
+      bikeDX: (left + pubW + PAIR_GAP + BIKE_ANCHOR_TO_LEFT) - W * BIKE_SCREEN_FRAC
     };
   }
 
-  // Resolved once per frame so the hotel, its veranda lights and the bike can't
-  // disagree about where they are.
-  function applyTitleLayout() {
-    const lay = titleLayout();
-    state.pubDX = lay.pubDX * state.startFrame;
-    state.bikeDX = lay.bikeDX * state.startFrame;
+  // The ending mirrors the start — pub hard against the right edge, bike clear of
+  // it on the left — but gets there differently. Rather than sliding the building
+  // across the sand, the bike pulls up short of it, which is what you'd actually
+  // do. That leaves the pub anchored in the world, so its veranda lights, the
+  // fireworks off its roof and the camp beside it need no adjustment at all.
+  function arrivalLayout() {
+    const pubW = landmarkDrawnW(LANDMARKS.birdsville, LANDMARK_SIZE.birdsville);
+    const inset = pairInset(BIKE_DRAW_W + PAIR_GAP + pubW);
+    const stopBack = clamp(W * BIKE_SCREEN_FRAC - pubW / 2 - inset, 0, 1200);
+    const pubLeft = stopBack + W * BIKE_SCREEN_FRAC - pubW / 2;
+    // Keep the bike wholly on screen even on a frame too narrow for both.
+    const anchor = Math.max(BIKE_ANCHOR_TO_LEFT + 4,
+                            pubLeft - PAIR_GAP - BIKE_DRAW_W + BIKE_ANCHOR_TO_LEFT);
+    return { stopBack, bikeDX: anchor - W * BIKE_SCREEN_FRAC };
+  }
+
+  // Leftmost point of the bike's silhouette, as a distance left of its anchor, at
+  // the angle it is currently drawn. A wheelie swings the whole sprite back over
+  // the rear wheel, so the flat-bike figure (about 112px) badly underestimates it —
+  // near the loop-out angle it's more like 240. Both pin points are considered and
+  // the worse taken, so this never reads low.
+  function bikeLeftExtent(angle) {
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const yTop = -SPRITE.floorY * SPRITE_SCALE;
+    let worst = 0;
+    for (const [pivotOff, cx] of [[-HALF_WHEELBASE, SPRITE.rearX],
+                                  [HALF_WHEELBASE, SPRITE.frontX]]) {
+      const xs = [-cx * SPRITE_SCALE, (SPRITE.w - cx) * SPRITE_SCALE];
+      let min = Infinity;
+      for (const lx of xs) {
+        for (const ly of [yTop, 0]) {
+          min = Math.min(min, pivotOff + lx * cos - ly * sin);
+        }
+      }
+      worst = Math.max(worst, -min);
+    }
+    return worst;
+  }
+
+  // Resolved once per frame so each building, its veranda lights and the bike
+  // can't disagree about where they are.
+  function applyFraming() {
+    const start = titleLayout();
+    const fin = arrivalLayout();
+    state.stopX = FINISH_DISTANCE - fin.stopBack;
+
+    // Reframe over the last stretch of the run rather than snapping on arrival.
+    const a = smooth(clamp(
+      (state.cameraX - (state.stopX - ARRIVE_APPROACH)) / ARRIVE_APPROACH, 0, 1));
+
+    // Pinned so turning the phone at the pub re-frames instead of going crooked.
+    if (state.mode === 'arriving' || state.mode === 'finished') {
+      state.cameraX = state.stopX;
+    }
+
+    // The arrival shift moves the bike toward the left edge, so it is clamped
+    // against the silhouette's actual reach at the current angle. Hold a big
+    // wheelie into town and the bike simply shifts less far, finishing the move as
+    // the nose comes down — rather than having its back wheel cropped off while
+    // you're still riding it.
+    const room = W * BIKE_SCREEN_FRAC - bikeLeftExtent(state.angle) - 4;
+    const shiftLeft = Math.min(-fin.bikeDX * a, Math.max(0, room));
+
+    state.startPubDX = start.pubDX * state.startFrame;
+    state.bikeDX = start.bikeDX * state.startFrame - shiftLeft;
   }
 
   // The bike is nearly inverted before it lets go — very forgiving on angle.
@@ -1613,8 +1676,9 @@
     fuel: FUEL_START,
     elapsed: 0,
     startFrame: 1,     // 1 on the title screen, eased to 0 once riding
-    pubDX: 0,
-    bikeDX: 0
+    startPubDX: 0,
+    bikeDX: 0,
+    stopX: FINISH_DISTANCE
   };
 
   function resetRun() {
@@ -1727,10 +1791,10 @@
     // fixed forward speed — the rider only manages pitch
     state.cameraX += RIDE_SPEED * dt;
 
-    if (state.cameraX >= FINISH_DISTANCE) {
-      // Pull up at the pub and let the town carry on for a moment before the
-      // end screen drops — arriving deserves a beat.
-      state.cameraX = FINISH_DISTANCE;
+    if (state.cameraX >= state.stopX) {
+      // Pull up in front of the pub and let the town carry on for a moment before
+      // the end screen drops — arriving deserves a beat.
+      state.cameraX = state.stopX;
       state.mode = 'arriving';
       state.arriveTimer = CELEBRATION_TIME;
       state.rocketTimer = 0.25;
@@ -2158,7 +2222,7 @@
     ctx.setLineDash([]);
     ctx.restore();
 
-    drawPub(PUB_START_X, 'MT DARE HOTEL', screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare, state.pubDX);
+    drawPub(PUB_START_X, 'MT DARE HOTEL', screenYOf, LANDMARKS.mtDare, LANDMARK_SIZE.mtDare, state.startPubDX);
     drawLandmarkSprite(PARK_SIGN_X, screenYOf, LANDMARKS.parkSign, LANDMARK_SIZE.parkSign);
     drawLandmarkSprite(STUCK_BIKE_X, screenYOf, LANDMARKS.stuckBike, LANDMARK_SIZE.stuckBike);
     drawBogSand(screenYOf, false);
@@ -2320,12 +2384,13 @@
     lastTime = now;
     reconcileSize();
 
-    if (state.mode === 'riding') update(dt);
-    else if (state.mode === 'arriving') updateArrival(dt);
     // Held at full while the title is up: resetRun never runs at startup, and the
     // layout depends on a width that can change under us when the phone is turned.
-    else if (state.mode === 'title') state.startFrame = 1;
-    applyTitleLayout();
+    if (state.mode === 'title') state.startFrame = 1;
+    applyFraming();
+
+    if (state.mode === 'riding') update(dt);
+    else if (state.mode === 'arriving') updateArrival(dt);
 
     // camera tracks ground height so the huge dunes read properly
     const target = nearTerrain(state.cameraX);
