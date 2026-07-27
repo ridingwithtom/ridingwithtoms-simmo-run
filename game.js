@@ -1433,7 +1433,8 @@
     eagle:      loadLandmark('eagle-sprite.png'),
     bogTiger:   loadLandmark('tiger-sprite.png'),
     brendan:    loadLandmark('brendan-sprite.png'),
-    riverGum:   loadLandmark('river-gum.png')
+    riverGum:   loadLandmark('river-gum.png'),
+    dingo:      loadLandmark('dingo-sprite.png')
   };
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
@@ -1834,116 +1835,34 @@
   }
 
   // ---------- dingo ----------
-  // Between the bogged tiger and the Maccas sign. Drawn on the near layer rather
-  // than back with the roos and emus, so it reads as something standing on the track
-  // watching you go past instead of scenery — which means it gets its colour, a
-  // ginger coat and pale legs, where the background animals are flat silhouettes.
-  // 0.225 rather than mid-way between the tiger and the Maccas sign: the camel's
-  // clearest-view search lands it at 0.32, and a near-layer dingo there would stand
-  // in front of the very camel that search was meant to reveal.
-  const DINGO_X = flattestNear(FINISH_DISTANCE * 0.225, 700, 120);
-  const DINGO_H = 78;
+  // On the mid band with the camel, so the dunes you ride pass in front of it and it
+  // drifts by slower than the foreground. Placed with the same clearest-view search
+  // the camel uses, or it would spend its time on screen hidden behind a crest.
+  const DINGO_X = clearestNear(FINISH_DISTANCE * 0.225, 700);
+  const DINGO_H = 74;
 
-  function drawDingo(screenYOf, t) {
-    const sx = (DINGO_X - state.cameraX) + W * BIKE_SCREEN_FRAC;
-    if (sx < -160 || sx > W + 160) return;
-    const groundY = screenYOf(nearTerrain(DINGO_X));
-    const s = DINGO_H / 100;
+  function drawDingo(t) {
+    const lm = LANDMARKS.dingo;
+    if (!lm || !lm.ready || !lm.img.naturalHeight) return;
+    const u = DINGO_X * MID_PARALLAX;
+    const sx = (DINGO_X - state.cameraX) * MID_PARALLAX + W * BIKE_SCREEN_FRAC;
+    const drawW = lm.img.naturalWidth * (DINGO_H / lm.img.naturalHeight);
+    if (sx + drawW / 2 < -60 || sx - drawW / 2 > W + 60) return;
+    const groundY = midGroundY(u);
 
-    // it has heard the bike: ears flick, tail sways, head bobs a little
-    const bob = Math.sin(t * 1.5) * 1.1;
-    const earFlick = Math.sin(t * 3.3) * 0.07;
-    const tailSway = Math.sin(t * 2.1) * 0.13;
-
-    const coat = '#b06f2c', pale = '#d5a463', dark = '#5f3612';
-
-    ctx.save();
-    ctx.translate(sx, groundY);
-    ctx.scale(s, s);
-    ctx.translate(0, bob);
+    // it has heard the bike coming and lifted its head — just enough movement to
+    // stop it reading as a decal
+    const bob = Math.sin(t * 1.4) * 1.1;
 
     ctx.save();
     ctx.filter = 'blur(2px)';
     ctx.beginPath();
-    ctx.ellipse(0, -bob, 54, 7, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(20,10,5,0.28)';
+    ctx.ellipse(sx, groundY, drawW * 0.34, 5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20,10,5,0.24)';
     ctx.fill();
     ctx.restore();
 
-    // legs first, so the body sits over the tops of them
-    ctx.strokeStyle = pale;
-    ctx.lineWidth = 9;
-    ctx.lineCap = 'round';
-    for (const [hx, splay] of [[-26, -6], [-20, 3], [24, -4], [30, 5]]) {
-      ctx.beginPath();
-      ctx.moveTo(hx, -46);
-      ctx.quadraticCurveTo(hx + splay * 0.5, -24, hx + splay, -bob - 1);
-      ctx.stroke();
-    }
-
-    // tail, carried low with a bushy sweep
-    ctx.save();
-    ctx.translate(-38, -60);
-    ctx.rotate(tailSway);
-    ctx.fillStyle = coat;
-    ctx.beginPath();
-    ctx.moveTo(4, -8);
-    ctx.quadraticCurveTo(-22, -6, -32, 14);
-    ctx.quadraticCurveTo(-16, 2, 4, 6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    // Torso, neck and head as a single path. Drawn as separate pieces the parts
-    // read as a slab with a dot floating off one end; one outline reads as a dog.
-    ctx.fillStyle = coat;
-    ctx.beginPath();
-    ctx.moveTo(-38, -58);
-    ctx.bezierCurveTo(-42, -74, -12, -78, 12, -72);     // back
-    ctx.bezierCurveTo(22, -70, 24, -76, 33, -82);       // shoulder rising to neck
-    ctx.lineTo(43, -93);
-    ctx.bezierCurveTo(51, -100, 64, -96, 65, -85);      // skull
-    ctx.lineTo(82, -79);                                // muzzle
-    ctx.lineTo(63, -73);
-    ctx.bezierCurveTo(57, -66, 45, -62, 39, -52);       // throat into chest
-    ctx.bezierCurveTo(31, -40, 10, -38, -12, -41);      // belly
-    ctx.bezierCurveTo(-28, -43, -36, -47, -38, -58);
-    ctx.closePath();
-    ctx.fill();
-
-    // pale chest and underline
-    ctx.fillStyle = pale;
-    ctx.beginPath();
-    ctx.moveTo(36, -54);
-    ctx.bezierCurveTo(30, -42, 10, -41, -10, -43);
-    ctx.bezierCurveTo(4, -48, 24, -50, 33, -60);
-    ctx.closePath();
-    ctx.fill();
-
-    // pricked ears
-    ctx.fillStyle = coat;
-    for (const [ex, ey, lean] of [[44, -92, -0.16], [55, -89, 0.04]]) {
-      ctx.save();
-      ctx.translate(ex, ey);
-      ctx.rotate(lean + earFlick);
-      ctx.beginPath();
-      ctx.moveTo(-6, 5);
-      ctx.lineTo(0, -17);
-      ctx.lineTo(7, 4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-
-    ctx.fillStyle = dark;
-    ctx.beginPath();
-    ctx.ellipse(80, -78, 3.2, 2.6, 0, 0, Math.PI * 2);   // nose
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(58, -86, 2.6, 2.8, 0, 0, Math.PI * 2);   // eye
-    ctx.fill();
-
-    ctx.restore();
+    ctx.drawImage(lm.img, sx - drawW / 2, groundY - DINGO_H + bob, drawW, DINGO_H);
   }
 
   function drawBigRedSign(screenYOf) {
@@ -2669,6 +2588,7 @@
     ctx.fill();
 
     drawCamel(t);
+    drawDingo(t);
   }
 
   // The near layer's sand fill, shared so anything drawn to blend into the ground
@@ -2755,7 +2675,6 @@
     drawLandmarkSprite(MACCAS_X, screenYOf, LANDMARKS.maccasSign, LANDMARK_SIZE.maccasSign);
     drawCamp(screenYOf, performance.now() * 0.001);
     drawPub(FINISH_DISTANCE, 'BIRDSVILLE PUB', screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville);
-    drawDingo(screenYOf, t);
     drawRiverGums(screenYOf);
     drawLandmarkSprite(BRENDAN_X, screenYOf, LANDMARKS.brendan, LANDMARK_SIZE.brendan);
     drawBigRedSign(screenYOf);
