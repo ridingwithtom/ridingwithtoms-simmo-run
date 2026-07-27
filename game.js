@@ -18,20 +18,62 @@
   const finishTimeEl = document.getElementById('finish-time');
   const deadDetailEl = document.getElementById('dead-detail');
 
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
   // ---------- canvas sizing ----------
-  let W = 0, H = 0, DPR = 1;
+  // W and H are the *virtual* viewport: how much world is in frame, not how many
+  // CSS pixels the canvas occupies. On a phone they stay near the desktop values
+  // and ZOOM shrinks everything to fit, so a small screen shows the same stretch
+  // of desert rather than the same stretch magnified — you get the same warning
+  // of the next dune. Every draw function is written in terms of W and H, so the
+  // zoom costs nothing beyond the transform below.
+  //
+  // Anything working in real CSS pixels (the touch split, the DOM HUD) must keep
+  // using window.innerWidth / CSS units, not these.
+  const REF_W = 1180, REF_H = 620;   // the view a desktop window already gives
+  const MIN_ZOOM = 0.45;             // past this the bike is too small to read
+  let W = 0, H = 0, DPR = 1, ZOOM = 1;
+
+  function viewportPx() {
+    // A page that isn't laid out yet — or is in a backgrounded tab being
+    // restored — can report 0 here. Assigning that to canvas.width gives a 0x0
+    // backing store and a blank game, so fall back to the canvas's own box and
+    // then to the reference view.
+    const rect = canvas.getBoundingClientRect();
+    return {
+      w: window.innerWidth || Math.round(rect.width) || REF_W,
+      h: window.innerHeight || Math.round(rect.height) || REF_H
+    };
+  }
+
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
-    W = window.innerWidth;
-    H = window.innerHeight;
-    canvas.width = W * DPR;
-    canvas.height = H * DPR;
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  }
-  window.addEventListener('resize', resize);
-  resize();
+    const { w: cssW, h: cssH } = viewportPx();
 
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    // Never zoom in past 1:1 — big screens are already showing plenty, and
+    // magnifying would make the game easier than it was designed to be.
+    ZOOM = clamp(Math.min(cssW / REF_W, cssH / REF_H), MIN_ZOOM, 1);
+
+    W = cssW / ZOOM;
+    H = cssH / ZOOM;
+    canvas.width = Math.round(cssW * DPR);
+    canvas.height = Math.round(cssH * DPR);
+    ctx.setTransform(DPR * ZOOM, 0, 0, DPR * ZOOM, 0, 0);
+  }
+
+  // Mobile Safari collapses and expands its toolbar without reliably firing a
+  // resize event, so reconcile every frame as well. It's two integer compares.
+  function reconcileSize() {
+    const { w, h } = viewportPx();
+    if (canvas.width !== Math.round(w * DPR) || canvas.height !== Math.round(h * DPR)) {
+      resize();
+    }
+  }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  resize();
 
   // ---------- input (lean only + space) ----------
   const keys = { ArrowUp: false, ArrowDown: false };
@@ -2063,6 +2105,7 @@
   function step(now) {
     const dt = Math.min(0.033, (now - lastTime) / 1000);
     lastTime = now;
+    reconcileSize();
 
     if (state.mode === 'riding') update(dt);
     else if (state.mode === 'arriving') updateArrival(dt);

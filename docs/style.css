@@ -19,6 +19,10 @@ html, body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  /* iOS Safari's 100vh is the *large* viewport — taller than what you can
+     actually see — so the bottom of the canvas hides behind the toolbar. dvh
+     tracks the visible area instead. The 100vh above stays as the fallback. */
+  height: 100dvh;
   touch-action: none;
 }
 
@@ -32,8 +36,8 @@ canvas#game {
 /* ---------- HUD ---------- */
 #fuel-hud {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  top: calc(16px + env(safe-area-inset-top));
+  left: calc(16px + env(safe-area-inset-left));
   color: #fff8ec;
   text-shadow: 0 1px 4px rgba(0,0,0,0.55);
   user-select: none;
@@ -81,8 +85,8 @@ canvas#game {
 
 #progress-hud {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: calc(16px + env(safe-area-inset-top));
+  right: calc(16px + env(safe-area-inset-right));
   color: #fff8ec;
   text-shadow: 0 1px 4px rgba(0,0,0,0.55);
   text-align: right;
@@ -140,7 +144,7 @@ canvas#game {
 
 #help {
   position: absolute;
-  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   color: #fff8ec;
@@ -298,7 +302,7 @@ canvas#game {
 #rotate-hint {
   display: none;
   position: absolute;
-  bottom: 58px;
+  bottom: calc(58px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   padding: 7px 15px;
@@ -327,9 +331,9 @@ canvas#game {
 /* The HUD numerals are sized for a desktop monitor; on a phone in landscape
    they'd swallow the sky. The overlay copy needs reining in too. */
 @media (max-width: 900px), (max-height: 520px) {
-  #fuel-hud, #progress-hud { top: 10px; }
-  #fuel-hud { left: 10px; }
-  #progress-hud { right: 10px; }
+  #fuel-hud, #progress-hud { top: calc(10px + env(safe-area-inset-top)); }
+  #fuel-hud { left: calc(10px + env(safe-area-inset-left)); }
+  #progress-hud { right: calc(10px + env(safe-area-inset-right)); }
   #fuel-num   { font-size: 30px; }
   #dunes-num  { font-size: 28px; }
   #fuel-title, #progress-title { font-size: 11px; margin-bottom: 5px; }
@@ -338,7 +342,7 @@ canvas#game {
   #progress-bar { height: 7px; }
   .cap { font-size: 9px; }
 
-  #help { font-size: 11px; padding: 5px 12px; bottom: 10px; }
+  #help { font-size: 11px; padding: 5px 12px; bottom: calc(10px + env(safe-area-inset-bottom)); }
 
   #start-screen h1 { font-size: 27px; }
   #finish-screen h1, #dead-screen h1 { font-size: 22px; }
