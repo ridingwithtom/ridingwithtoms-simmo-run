@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# intermediate files from assets/optimise.py
+*.q.png

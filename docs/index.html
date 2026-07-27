@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1c2e56">
+<meta name="description" content="Ride a WR250R from Mt Dare Hotel to Birdsville across 1200 sand dunes of the Simpson Desert — on the back wheel, the whole way.">
+<title>RidingWithTom's Simmo Run!</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20fill%3D%22%231c2e56%22/%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2234%22%20r%3D%2213%22%20fill%3D%22%23ffcf7a%22/%3E%3Cpath%20d%3D%22M0%2044c10-9%2018-4%2028-9s20%203%2036-6v35H0z%22%20fill%3D%22%23c85f2c%22/%3E%3Cpath%20d%3D%22M0%2054c14-7%2022-2%2034-6s16%201%2030-4v20H0z%22%20fill%3D%22%239c4620%22/%3E%3C/svg%3E">
+<meta property="og:title" content="RidingWithTom's Simmo Run!">
+<meta property="og:description" content="Ride a WR250R from Mt Dare Hotel to Birdsville across 1200 sand dunes of the Simpson Desert — on the back wheel, the whole way.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="style.css?v=1785140321">
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game"></canvas>
+
+  <div id="fuel-hud">
+    <div id="fuel-title">FUEL</div>
+    <div id="fuel-bar"><div id="fuel-fill"></div></div>
+    <div id="fuel-count"><span id="fuel-num">--</span><span class="cap">seconds left</span></div>
+  </div>
+
+  <div id="progress-hud">
+    <div id="progress-title">Distance to Birdsville</div>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <div id="progress-count"><span id="dunes-num">1200</span><span class="cap">dunes to go</span></div>
+  </div>
+
+  <div id="help">
+    <span class="kbd-only">&darr; lean back to lift the nose &nbsp;&nbsp; &uarr; lean forward to bring it down &mdash; keep that front wheel up!</span>
+    <span class="touch-only">hold <b>left</b> to lift the nose &nbsp;&nbsp; hold <b>right</b> to bring it down</span>
+  </div>
+
+  <div id="touch-zones" aria-hidden="true">
+    <div class="zone left"><span>&darr;<br>lean back</span></div>
+    <div class="zone right"><span>&uarr;<br>lean forward</span></div>
+  </div>
+
+  <div id="rotate-hint" aria-hidden="true">&#8635; turn your phone sideways for a wider view</div>
+
+  <div id="start-screen">
+    <h1>RidingWithTom's Simmo Run!</h1>
+    <p class="press-space"><span class="kbd-only">press <span class="key">space</span> to start</span><span class="touch-only"><span class="key">tap</span> to start</span></p>
+    <p class="blurb">Mt Dare Hotel to Birdsville &mdash; 1200 sand dunes of the Simpson Desert.</p>
+
+    <div class="rule">
+      <strong>&#9888; You must wheelie the WHOLE way</strong>
+      <span class="rule-body">
+        <span class="kbd-only">Hold <b>&darr;</b> to keep the nose up.</span><span class="touch-only">Hold the <b>left</b> half of the screen to keep the nose up.</span> Gravity pulls it back down, so you can never stop working.<br>
+        Let the <b>front wheel touch the sand</b> &mdash; that's a stack.<br>
+        Lean too far and you'll pass the balance point and <b>loop it over backwards</b> &mdash; also a stack.<br>
+        Every stack costs <b>5 seconds of fuel</b>, and you've only enough for about three.
+      </span>
+    </div>
+  </div>
+
+  <div id="finish-screen" class="hidden">
+    <h1>You made it to Birdsville!</h1>
+    <p id="finish-time"></p>
+    <p class="press-space"><span class="kbd-only">press <span class="key">space</span> to ride again</span><span class="touch-only"><span class="key">tap</span> to ride again</span></p>
+  </div>
+
+  <div id="dead-screen" class="hidden">
+    <h1>You ran out of fuel and died</h1>
+    <p id="dead-detail"></p>
+    <p class="press-space"><span class="kbd-only">press <span class="key">space</span> to try again</span><span class="touch-only"><span class="key">tap</span> to try again</span></p>
+  </div>
+</div>
+<script src="game.js?v=1785140321"></script>
+</body>
+</html>
