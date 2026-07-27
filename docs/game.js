@@ -70,6 +70,8 @@
     }
   }
 
+  document.body.classList.add('on-title');
+
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', resize);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
@@ -146,7 +148,10 @@
   });
 
   // ---------- course layout ----------
-  const PUB_START_X = -520;   // sits at the left of frame at the start line
+  // Centre-frame at the start line. The bike shares this world position, so the
+  // title screen nudges the bike sideways (START_SHIFT below) to stand clear of
+  // the building rather than in front of it.
+  const PUB_START_X = 0;
   const BIG_RED_X = 21200;
   const FINISH_DISTANCE = 24000;
   const TOTAL_DUNES = 1200;
@@ -1217,7 +1222,9 @@
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
   // some poor bugger is bogged halfway up the face of Big Red.
-  const PARK_SIGN_X = 520;    // sits right of frame at the start line
+  // A fifth of the way in, on the most level sand nearby so the flat-bottomed
+  // sign sits square instead of straddling a dune face.
+  const PARK_SIGN_X = flattestNear(FINISH_DISTANCE * 0.20, 1200, 200);
   const STUCK_BIKE_X = BIG_RED_X - 670;   // ~halfway up the face
   // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
   // the sign straddled a dune face with a 49px drop across its base.
@@ -1363,6 +1370,18 @@
   // the start (and of Birdsville on arrival).
   const BIKE_SCREEN_FRAC = 0.5;
 
+  // The hotel and the bike occupy the same world position at the start line, so
+  // on the title screen the bike is drawn to the right of centre to stand beside
+  // the building instead of inside it. Eased back to zero once you set off, so
+  // there's no jump. Capped by the screen width, because in portrait the hotel is
+  // most of the frame and a fixed nudge would push the bike off the right edge.
+  const START_SHIFT = 300;
+  const START_SHIFT_EASE = 2.6;      // per second
+
+  function startShiftTarget() {
+    return Math.min(START_SHIFT, Math.max(0, W * 0.5 - 130));
+  }
+
   // The bike is nearly inverted before it lets go — very forgiving on angle.
   // Pitch response is deliberately slow. Holding a wheelie is a balance task, so
   // the rider needs time to react: with the old stiff values (14/6/3.2) the nose
@@ -1426,7 +1445,8 @@
     arriveTimer: 0,
     rocketTimer: 0,
     fuel: FUEL_START,
-    elapsed: 0
+    elapsed: 0,
+    startShift: 0
   };
 
   function resetRun() {
@@ -1438,6 +1458,7 @@
     state.pitch = 0;
     state.pitchVel = 0;
     state.leanInput = 0;
+    state.startShift = startShiftTarget();
     state.airY = 0;
     state.airVel = 0;
     state.airborne = false;
@@ -1461,10 +1482,12 @@
     finishScreen.classList.add('hidden');
     deadScreen.classList.add('hidden');
     document.body.classList.remove('riding');
+    document.body.classList.add('on-title');
   }
 
   function startRun() {
     state.mode = 'riding';
+    document.body.classList.remove('on-title');
     state.pitch = START_PITCH;
     state.pitchVel = 0;
     state.graceTimer = WHEELIE_GRACE;
@@ -1552,6 +1575,9 @@
     }
 
     let leanTarget = 0;
+    state.startShift += (0 - state.startShift) * Math.min(1, dt * START_SHIFT_EASE);
+    if (Math.abs(state.startShift) < 0.5) state.startShift = 0;
+
     if (keys.ArrowUp) leanTarget += 1;
     if (keys.ArrowDown) leanTarget -= 1;
     if (!leanTarget) leanTarget = touchLeanSum();
@@ -2000,7 +2026,7 @@
   }
 
   function drawTheBike(screenYOf) {
-    const bikeScreenX = W * BIKE_SCREEN_FRAC;
+    const bikeScreenX = W * BIKE_SCREEN_FRAC + state.startShift;
     const ground = chassisAt(state.cameraX);
     const centreGroundY = screenYOf((ground.yRear + ground.yFront) / 2);
 
@@ -2127,6 +2153,10 @@
 
     if (state.mode === 'riding') update(dt);
     else if (state.mode === 'arriving') updateArrival(dt);
+    // Recomputed each frame while the title is up rather than set once: resetRun
+    // never runs at startup, and the cap depends on a width that can change under
+    // us when the phone is rotated.
+    else if (state.mode === 'title') state.startShift = startShiftTarget();
 
     // camera tracks ground height so the huge dunes read properly
     const target = nearTerrain(state.cameraX);
