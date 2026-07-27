@@ -33,10 +33,11 @@ for sy in range(h):
         idx = len(regions)
         q = deque([(sx, sy)])
         label[sy][sx] = idx
-        size = 0; edge = False; accx = 0; accy = 0
+        size = 0; edge = False; accx = 0; accy = 0; accmin = 0
         while q:
             cx, cy = q.popleft()
             size += 1; accx += cx; accy += cy
+            accmin += min(px[cx, cy][:3])
             if cx == 0 or cy == 0 or cx == w - 1 or cy == h - 1:
                 edge = True
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
@@ -44,7 +45,8 @@ for sy in range(h):
                 if 0 <= nx < w and 0 <= ny < h and label[ny][nx] == -1 and is_white(px[nx, ny]):
                     label[ny][nx] = idx
                     q.append((nx, ny))
-        regions.append({"size": size, "edge": edge, "cx": accx / size, "cy": accy / size})
+        regions.append({"size": size, "edge": edge, "cx": accx / size,
+                        "cy": accy / size, "minch": accmin / size})
 
 edge_bg = {i for i, r in enumerate(regions) if r["edge"]}
 
@@ -92,7 +94,22 @@ for i, r in enumerate(regions):
     for wh in wheels:
         if (r["cx"] - wh["cx"]) ** 2 + (r["cy"] - wh["cy"]) ** 2 < (wh["r"] * 0.94) ** 2:
             spoke_bg.add(i); break
-bg = edge_bg | spoke_bg
+# Enclosed pockets of background the edge flood can never reach: the slot between
+# the luggage and the frame, the sliver alongside the fork leg, the gap behind the
+# front number board. Left opaque they show up as white patches on the bike.
+#
+# They are told apart from the bike's own white bodywork on two counts at once.
+# Purity: these are the photo's pure-white background, where painted white is
+# always slightly shaded — the biggest bodywork region averages 237 on its minimum
+# channel, these average 249+. And size: on luminance alone the two populations
+# overlap (244.1 vs 244.0 at the boundary), so a purity threshold by itself would
+# start punching holes in highlights. Requiring both leaves an 8-point margin.
+pure_bg = {i for i, r in enumerate(regions)
+           if i not in edge_bg and r["size"] >= 150 and r["minch"] >= 246}
+print(f"  clearing {len(pure_bg)} enclosed pure-white pockets "
+      f"({sum(regions[i]['size'] for i in pure_bg)} px)")
+
+bg = edge_bg | spoke_bg | pure_bg
 
 # --- compose, punching out the wheel interiors ------------------------------
 out = Image.new("RGBA", (w, h))
