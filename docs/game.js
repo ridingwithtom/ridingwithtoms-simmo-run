@@ -514,6 +514,54 @@
   // sized off this, so lowering it fattens the tyre and raising it slims it.
   const TYRE_INNER = 0.80;          // rubber spans TYRE_INNER*r .. r
 
+  // prep.py punches the whole wheel disc out of the photo so the spinning wheel
+  // can be drawn procedurally, which also deletes the parts of the swingarm and
+  // fork slider that cross the wheels — leaving both looking as though they pass
+  // behind. These stubs put them back, drawn after the wheels and under the
+  // sprite, so they land in the punched-out area and read as being in front.
+  //
+  // Geometry and colours measured off the sprite where it still holds them, just
+  // outside each disc: the swingarm enters level with the rear axle at x~396 as a
+  // 30px silver band, the fork slider enters the front disc from upper-left at
+  // about 26 degrees off vertical.
+  function taperedBar(x0, y0, x1, y1, halfStart, halfEnd, fill, edge) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;          // unit normal
+    ctx.beginPath();
+    ctx.moveTo(x0 + nx * halfStart, y0 + ny * halfStart);
+    ctx.lineTo(x1 + nx * halfEnd, y1 + ny * halfEnd);
+    ctx.lineTo(x1 - nx * halfEnd, y1 - ny * halfEnd);
+    ctx.lineTo(x0 - nx * halfStart, y0 - ny * halfStart);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  function drawUnsprung() {
+    const rear = SPRITE.wheels[0], front = SPRITE.wheels[1];
+
+    // swingarm: pivot side to rear axle, tapering in as real ones do
+    taperedBar(408, 652, rear.cx + 6, rear.cy + 2, 16, 11, '#adacaa', '#5e5e5c');
+
+    // fork slider down to the front axle
+    taperedBar(916, 452, front.cx - 4, front.cy - 6, 14, 11, '#e8e8e8', '#8d8d8d');
+
+    // axle nuts, so the bars terminate on something
+    for (const [cx, cy] of [[rear.cx, rear.cy], [front.cx, front.cy]]) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+      ctx.fillStyle = '#3a3b3e';
+      ctx.fill();
+      ctx.strokeStyle = '#17181a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+  }
+
   function drawSpinningWheel(wh, spin) {
     const r = wh.r;
     ctx.save();
@@ -521,8 +569,12 @@
     ctx.rotate(spin);
 
     // ---- tyre carcass ----
+    // An annulus, not a disc: filling the whole circle put an opaque black plate
+    // behind the spokes, where the desert should show through. The sprite has the
+    // wheel punched clean out, so anything not drawn here is see-through.
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r * TYRE_INNER, 0, Math.PI * 2, true);
     ctx.fillStyle = '#181713';
     ctx.fill();
 
@@ -543,9 +595,9 @@
 
     // dark tread valley so the knobs stand off the carcass
     ctx.beginPath();
-    ctx.arc(0, 0, r * (TYRE_INNER + 0.03), 0, Math.PI * 2);
+    ctx.arc(0, 0, r * (TYRE_INNER + 0.035), 0, Math.PI * 2);
     ctx.strokeStyle = '#0d0c0a';
-    ctx.lineWidth = r * 0.05;
+    ctx.lineWidth = r * 0.045;
     ctx.stroke();
 
     // ---- gold rim, sitting right up against the rubber ----
@@ -585,7 +637,7 @@
 
     // ---- clumps of red dirt, big enough to actually see ----
     ctx.fillStyle = '#94481f';
-    for (const [a, rad, size] of [[2.1, 0.46, 0.10], [4.4, 0.58, 0.085]]) {
+    for (const [a, rad, size] of [[2.1, 0.90, 0.075], [4.4, 0.86, 0.065]]) {
       ctx.beginPath();
       ctx.arc(Math.cos(a) * r * rad, Math.sin(a) * r * rad, r * size, 0, Math.PI * 2);
       ctx.fill();
@@ -636,7 +688,9 @@
     ctx.rotate(angle);
     ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
     ctx.translate(-contactX, -SPRITE.floorY);
-    for (const wh of SPRITE.wheels) drawSpinningWheel(wh, wheelSpin);
+    // Rear wheel spins, front stays put. Index 0 is the rear (rearX 196 vs 1015).
+    SPRITE.wheels.forEach((wh, i) => drawSpinningWheel(wh, i === 0 ? wheelSpin : 0));
+    drawUnsprung();
     // Explicit destination size, in sprite coordinates. Drawing at the image's
     // natural size would tie the geometry below to whatever resolution bike.png
     // happens to be stored at, so shipping a downscaled sprite would shrink the
@@ -671,7 +725,10 @@
   // board, the tail light under the rear rack. Drawn after the day tint so they
   // add light to the scene rather than being darkened along with it.
   const LAMP_POS = { x: 880, y: 258 };
-  const TAIL_POS = { x: 150, y: 402 };
+  // x=150 sat inside the black rear bag, which lit the luggage up rather than
+  // reading as a lamp. The bag's leading edge is around x=120; the tail tidy
+  // behind it runs back to x=52, which is where the light actually belongs.
+  const TAIL_POS = { x: 78, y: 400 };
 
   function spriteToScreen(sx, sy, xf) {
     const cos = Math.cos(xf.angle), sin = Math.sin(xf.angle);
@@ -1648,6 +1705,7 @@
   // little hops. The biggest ordinary dune climbs 216px and Big Red climbs 416px,
   // so this sits in the gap: ordinary dunes are ridden over, Big Red sends it.
   const MIN_CLIMB = 260;
+  const CREST_FLATTEN = 0.35;   // launch once the ramp eases to this share of its steepest
 
   const state = {
     mode: 'title',                    // title | riding | finished | dead
@@ -1664,6 +1722,7 @@
     prevElev: null,
     prevSlope: 0,
     climbAccum: 0,
+    climbPeakSlope: 0,
     crashed: false,
     crashTimer: 0,
     squash: 0,          // suspension compression, px into the sand
@@ -1697,6 +1756,7 @@
     state.prevElev = null;
     state.prevSlope = state.angle;
     state.climbAccum = 0;
+    state.climbPeakSlope = 0;
     state.crashed = false;
     state.crashTimer = 0;
     state.squash = 0;
@@ -1730,11 +1790,28 @@
   // Where the chassis rests: both tyres sit exactly on the sand and the chassis
   // takes the angle of the line joining them. The bike's own ground clearance
   // lets it bridge crests, so nothing is lifted off the surface.
+  // Height to sit the bottom of a wheel at so the tyre rests ON the sand rather
+  // than through it. Pinning the lowest point of the disc to the ground directly
+  // beneath its centre buries the uphill side by r*(1-cos(slope)) — about 10 world
+  // px on Big Red's 44-degree face, which is what made the rear wheel look like it
+  // was cutting into the dune on the way down. Supporting the whole disc instead
+  // costs a dozen terrain samples and is right on slopes, crests and dips alike.
+  function wheelRest(x) {
+    const r = WHEEL_WORLD_R;
+    let highest = -Infinity;
+    for (let i = -6; i <= 6; i++) {
+      const dx = (i / 6) * r;
+      const centre = nearTerrain(x + dx) + Math.sqrt(Math.max(0, r * r - dx * dx));
+      if (centre > highest) highest = centre;
+    }
+    return highest - r;
+  }
+
   function chassisAt(worldX) {
     const xR = worldX - HALF_WHEELBASE;
     const xF = worldX + HALF_WHEELBASE;
-    const yR = nearTerrain(xR);
-    const yF = nearTerrain(xF);
+    const yR = wheelRest(xR);
+    const yF = wheelRest(xF);
     return {
       angle: Math.atan2(-(yF - yR), 2 * HALF_WHEELBASE),
       yRear: yR,
@@ -1815,20 +1892,38 @@
     if (!leanTarget) leanTarget = touchLeanSum();
     state.leanInput += (leanTarget - state.leanInput) * Math.min(1, dt * 7);
 
-    // dune crest launches the bike
+    // Dune crest launches the bike. Waiting for the elevation to actually start
+    // falling launches far too late on Big Red: its summit is rounded over about
+    // 400px during which you sit within 20px of the top, so you crested, rode
+    // across the flat for the best part of a second, and only then took off.
+    // Launching when the ramp flattens off — the slope dropping to a third of the
+    // steepest part of this climb — fires at the lip of the face instead, roughly
+    // 460px earlier. Ordinary dunes never reach MIN_CLIMB, so Big Red is the only
+    // one this affects.
     const elevNow = nearTerrain(state.cameraX);
     if (state.prevElev === null) state.prevElev = elevNow;
     const dElev = elevNow - state.prevElev;
+    const slope = dElev / Math.max(1e-6, RIDE_SPEED * dt);
+
     if (dElev > 0) {
       state.climbAccum += dElev;
-    } else if (state.climbAccum > 0) {
-      if (!state.airborne && state.climbAccum > MIN_CLIMB) {
+      if (slope > state.climbPeakSlope) state.climbPeakSlope = slope;
+    }
+
+    const flattening = state.climbPeakSlope > 0 &&
+                       slope < state.climbPeakSlope * CREST_FLATTEN;
+    if (state.climbAccum > MIN_CLIMB && (flattening || dElev <= 0)) {
+      if (!state.airborne) {
         state.airborne = true;
         state.angleVel = state.pitchVel;
         const strength = Math.min(state.climbAccum, 420);
         state.airVel = 70 + strength * 2.0 + RIDE_SPEED * 0.25;
       }
       state.climbAccum = 0;
+      state.climbPeakSlope = 0;
+    } else if (dElev <= 0) {
+      state.climbAccum = 0;
+      state.climbPeakSlope = 0;
     }
     state.prevElev = elevNow;
 
@@ -1836,7 +1931,7 @@
     let landedHard = false;
 
     const xRearContact = state.cameraX - HALF_WHEELBASE;
-    const yRearContact = nearTerrain(xRearContact);
+    const yRearContact = nearTerrain(xRearContact);   // the sand itself, for dust
 
     if (state.airborne) {
       state.airVel -= GRAVITY * dt;
