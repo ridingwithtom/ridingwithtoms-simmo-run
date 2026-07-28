@@ -27,7 +27,7 @@ EXTRA = ["manifest.webmanifest"]
 ICONS = ["icon-180.png", "icon-192.png", "icon-512.png"]
 # Copied verbatim — optimise.py only knows how to handle images, and the track is
 # fetched on the first gesture rather than at load, so its size never delays the game.
-AUDIO = ["Kookaburra_Dawn.mp3"]
+AUDIO = ["kookaburra.mp3"]
 # Everything game.js actually loads. Keep this in step with LANDMARKS in game.js.
 ASSETS = [
     "bike.png", "mt-dare-hotel.png", "birdsville-pub.png", "big-red-sign.png",
@@ -84,11 +84,17 @@ def main():
         if not os.path.exists(os.path.join(DIST, ref)):
             sys.exit(f"index.html references {ref}, which isn't in the build.")
 
-    # and anything game.js loads at runtime, which index.html never mentions
-    for ref in set(re.findall(r"'(assets/[\w.\-]+\.(?:mp3|ogg|m4a))'",
+    # and anything game.js loads at runtime, which index.html never mentions.
+    # Compared against a directory listing rather than with os.path.exists, because
+    # this filesystem is case-insensitive and GitHub Pages is not: 'Kookaburra.mp3'
+    # would sail through here and 404 in production.
+    built = set(os.listdir(os.path.join(DIST, "assets")))
+    for ref in set(re.findall(r"'assets/([\w.\-]+\.(?:mp3|ogg|m4a))'",
                               open(os.path.join(ROOT, "game.js")).read())):
-        if not os.path.exists(os.path.join(DIST, ref)):
-            sys.exit(f"game.js loads {ref}, which isn't in the build.")
+        if ref not in built:
+            near = [n for n in built if n.lower() == ref.lower()]
+            hint = f" (the build has {near[0]!r} — the case has to match)" if near else ""
+            sys.exit(f"game.js loads assets/{ref}, which isn't in the build{hint}.")
 
     stamp = str(int(time.time()))
     for name in CODE:

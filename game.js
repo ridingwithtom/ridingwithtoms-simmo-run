@@ -79,89 +79,66 @@
   resize();
 
   // ---------- music ----------
-  // Web Audio rather than <audio loop>. The file carries a LAME tag but no Xing
-  // header, so a decoder can't apply the encoder's gapless information and element
-  // looping leaves its padding in — an audible tick every 30 seconds. Decoding to a
-  // buffer and looping the source is sample-accurate, and the padding can be measured
-  // off the samples and skipped with loopStart/loopEnd.
+  // Web Audio rather than <audio loop>, because looping an mp3 is not sample-exact.
+  // The encoder brackets the music with a few thousand frames of its own: this file
+  // decodes to 1060992 samples of which only 1057619 are music, so looping the whole
+  // buffer would tick about 67ms of silence every time round. Nothing here trims the
+  // track itself - it is already cut to loop cleanly, tail straight into head with no
+  // silence at either end of the music. All that has to happen is skipping the
+  // container's padding.
   //
-  // Fetched on the first gesture rather than at load. It's 727KB against 0.71MB for
+  // Apple's encoder writes the exact figures into an iTunSMPB comment, which beats
+  // hunting for them in the waveform: measured against the samples, a noise-floor
+  // search overshoots the head by 110 samples and leaves 529 of padding on the tail.
+  // The tag lands on the frame the loop was actually cut at.
+  //
+  // Fetched on the first gesture rather than at load. It's 0.8MB against 0.71MB for
   // the whole rest of the site, and there's no reason for it to delay the game
   // appearing.
-  const MUSIC_URL = 'assets/Kookaburra_Dawn.mp3';
+  const MUSIC_URL = 'assets/kookaburra.mp3';
   const MUSIC_LEVEL = 0.34;
   const MUSIC_FADE_IN = 1.6;        // seconds, so it doesn't slam in
   let audioCtx = null, musicGain = null, musicStarted = false, musicLoading = false;
   let musicOn = false;
   try { musicOn = localStorage.getItem('simmoMusic') !== 'off'; } catch (_) { musicOn = true; }
 
-  // First and last sample above the noise floor. Only used when the quiet stretch is
-  // short enough to be encoder padding — a track that genuinely fades in would
-  // measure the same way, and trimming that would cut the fade off.
-  function loopPoints(buf) {
-    const thresh = 0.004, n = buf.length, sr = buf.sampleRate;
-    let first = n, last = 0;
-    for (let c = 0; c < buf.numberOfChannels; c++) {
-      const d = buf.getChannelData(c);
-      for (let i = 0; i < n; i++) if (Math.abs(d[i]) > thresh) { if (i < first) first = i; break; }
-      for (let i = n - 1; i >= 0; i--) if (Math.abs(d[i]) > thresh) { if (i > last) last = i; break; }
+  // Encoder delay, padding and true sample count, as hex fields in an ID3 comment.
+  // Read before decoding, because decodeAudioData takes ownership of the bytes and
+  // detaches them. Returns sample counts at the file's own rate, not the context's.
+  function readGapless(bytes) {
+    const head = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 1 << 16));
+    const needle = 'iTunSMPB';
+    let at = -1;
+    for (let i = 0; i + needle.length < head.length && at < 0; i++) {
+      let hit = true;
+      for (let j = 0; j < needle.length; j++) {
+        if (head[i + j] !== needle.charCodeAt(j)) { hit = false; break; }
+      }
+      if (hit) at = i;
     }
-    if (first >= last) return { start: 0, end: buf.duration };
-    const head = first / sr, tail = (n - 1 - last) / sr;
-    return {
-      start: head < 0.5 ? Math.max(0, head - 0.005) : 0,
-      end: tail < 0.5 ? Math.min(buf.duration, (last + 1) / sr + 0.005) : buf.duration
-    };
+    if (at < 0) return null;
+    let txt = '';
+    for (let i = at; i < Math.min(head.length, at + 200); i++) {
+      const c = head[i];
+      txt += (c >= 32 && c < 127) ? String.fromCharCode(c) : ' ';
+    }
+    const f = txt.match(/[0-9A-Fa-f]{8,16}/g);
+    if (!f || f.length < 4) return null;
+    const delay = parseInt(f[1], 16), pad = parseInt(f[2], 16), real = parseInt(f[3], 16);
+    if (!(delay >= 0 && pad >= 0 && real > 0)) return null;
+    return { delay: delay, pad: pad, real: real, total: delay + real + pad };
   }
 
-  // The track wasn't written as a loop: it ends about 5 dB louder than it starts,
-  // so joining the end straight back onto the head steps the level down audibly
-  // every thirty seconds. Instead each repeat is its own source, started early
-  // enough to overlap the one before it, and the two are crossfaded on an
-  // equal-power curve so the join has no dip and no seam.
-  const MUSIC_XFADE = 1.5;
-  const XFADE_STEPS = 64;
-  let musicBuf = null, loopFrom = 0, loopLen = 0, passLen = 0, nextPassAt = 0;
-  let fadeIn = null, fadeOut = null;
-
-  function buildCurves() {
-    fadeIn = new Float32Array(XFADE_STEPS);
-    fadeOut = new Float32Array(XFADE_STEPS);
-    for (let i = 0; i < XFADE_STEPS; i++) {
-      const t = i / (XFADE_STEPS - 1);
-      fadeIn[i] = Math.sqrt(t);
-      fadeOut[i] = Math.sqrt(1 - t);
-    }
-  }
-
-  // One playthrough of the trimmed region, fading in over its head and out over
-  // its tail. Queues the pass after next when it ends, which keeps exactly one
-  // repeat scheduled ahead - about thirty seconds of slack, so a throttled
-  // background tab can't starve the chain into a gap.
-  function schedulePass(at) {
-    const src = audioCtx.createBufferSource();
-    const g = audioCtx.createGain();
-    src.buffer = musicBuf;
-    src.connect(g);
-    g.connect(musicGain);
-    g.gain.setValueAtTime(0, at);
-    g.gain.setValueCurveAtTime(fadeIn, at, MUSIC_XFADE);
-    g.gain.setValueCurveAtTime(fadeOut, at + passLen, MUSIC_XFADE);
-    src.start(at, loopFrom, loopLen);
-    src.onended = () => { try { g.disconnect(); } catch (_) {} queueAhead(); };
-  }
-
-  // The window has to reach past a whole pass, or the repeat after the one now
-  // playing never gets queued and its start time falls into the past. A pass ends
-  // one crossfade after the next one began, so onended has passLen - MUSIC_XFADE
-  // of slack to queue the one after that: about half a minute.
-  function queueAhead() {
-    if (!musicBuf || !musicStarted) return;
-    const horizon = audioCtx.currentTime + passLen + MUSIC_XFADE + 1;
-    while (nextPassAt < horizon) {
-      schedulePass(nextPassAt);
-      nextPassAt += passLen;
-    }
+  // The tag counts samples at 44.1k; decodeAudioData may have resampled to whatever
+  // the device runs at. Going through the decoded duration converts without needing
+  // to know either rate: the whole raw buffer is `total` samples either way.
+  function loopWindow(buf, tag) {
+    if (!tag || !(tag.total > 0)) return { start: 0, end: buf.duration };
+    const perSample = buf.duration / tag.total;
+    const start = tag.delay * perSample;
+    const end = (tag.delay + tag.real) * perSample;
+    if (!(end > start) || end > buf.duration + 1e-6) return { start: 0, end: buf.duration };
+    return { start: start, end: end };
   }
 
   function startMusic() {
@@ -175,26 +152,30 @@
 
     fetch(MUSIC_URL)
       .then((r) => r.arrayBuffer())
-      .then((bytes) => new Promise((res, rej) => {
-        // the callback form, because Safari's decodeAudioData returns nothing
-        const p = audioCtx.decodeAudioData(bytes, res, rej);
-        if (p && p.then) p.then(res, rej);
-      }))
-      .then((buf) => {
+      .then((bytes) => {
+        const tag = readGapless(bytes);
+        return new Promise((res, rej) => {
+          // the callback form, because Safari's decodeAudioData returns nothing
+          const p = audioCtx.decodeAudioData(bytes, (buf) => res({ buf: buf, tag: tag }),
+                                                    rej);
+          if (p && p.then) p.then((buf) => res({ buf: buf, tag: tag }), rej);
+        });
+      })
+      .then((decoded) => {
         musicLoading = false;
         if (!musicOn) return;                       // muted while it was loading
-        const { start, end } = loopPoints(buf);
-        musicBuf = buf;
-        loopFrom = start;
-        loopLen = end - start;
-        passLen = loopLen - MUSIC_XFADE;
-        buildCurves();
+        const { start, end } = loopWindow(decoded.buf, decoded.tag);
         musicGain = audioCtx.createGain();
         musicGain.gain.value = 0;
         musicGain.connect(audioCtx.destination);
+        const src = audioCtx.createBufferSource();
+        src.buffer = decoded.buf;
+        src.loop = true;
+        src.loopStart = start;
+        src.loopEnd = end;
+        src.connect(musicGain);
+        src.start(0, start);
         musicStarted = true;
-        nextPassAt = audioCtx.currentTime + 0.05;
-        queueAhead();
         const now = audioCtx.currentTime;
         musicGain.gain.setValueAtTime(0, now);
         musicGain.gain.linearRampToValueAtTime(MUSIC_LEVEL, now + MUSIC_FADE_IN);
@@ -203,12 +184,11 @@
   }
 
   // A tab you've switched away from shouldn't keep the desert singing. Parking the
-  // clock rather than stopping the sources means it picks up exactly where it left
-  // off, and it stalls queueAhead for free while it's away.
+  // clock rather than stopping the source means it picks up exactly where it left off.
   document.addEventListener('visibilitychange', () => {
     if (!audioCtx) return;
     if (document.hidden) audioCtx.suspend();
-    else if (musicOn) { const p = audioCtx.resume(); if (p && p.then) p.then(queueAhead, () => {}); else queueAhead(); }
+    else if (musicOn) audioCtx.resume();
   });
 
   function applyMusicButton() {
@@ -234,7 +214,6 @@
           musicGain.gain.setValueAtTime(musicGain.gain.value, now);
           musicGain.gain.linearRampToValueAtTime(MUSIC_LEVEL, now + 0.4);
           if (audioCtx.state === 'suspended') audioCtx.resume();
-          queueAhead();
         } else {
           startMusic();
         }
@@ -243,8 +222,8 @@
         musicGain.gain.cancelScheduledValues(now);
         musicGain.gain.setValueAtTime(musicGain.gain.value, now);
         musicGain.gain.linearRampToValueAtTime(0, now + 0.4);
-        // then park the clock, so it isn't scheduling repeats nobody can hear.
-        // currentTime stops while suspended, which stalls queueAhead by itself.
+        // and park the clock once it's faded, so a muted tab isn't turning a decoder
+        // over for nothing. The gain ramp has to land first or it jumps back audibly.
         setTimeout(() => { if (!musicOn && audioCtx) audioCtx.suspend(); }, 450);
       }
     });

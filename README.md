@@ -12,7 +12,7 @@ water is translucent, so the bed, the fish and the submerged half of the bike al
 show through it, and it drags the bike down to a little over half speed — which
 costs you fuel you don't get back.
 
-The soundtrack is `assets/Kookaburra_Dawn.mp3`, thirty seconds of desert dawn on a
+The soundtrack is `assets/kookaburra.mp3`, twenty-four seconds of desert dawn on a
 loop. It only downloads once you tap or press space, so it never holds up the
 first paint, and the speaker button in the bottom right corner turns it off — the
 choice sticks in `localStorage`.
@@ -72,15 +72,22 @@ None of it is loaded at runtime and none of it ships.
 
 ## Notes on the music
 
-The mp3 has a LAME tag but no Xing header, so a decoder has no gapless
-information to work with and `<audio loop>` would tick audibly every thirty
-seconds. Web Audio instead: the decoder's leading padding is measured off the
-waveform and skipped, and because the track ends about 5 dB louder than it starts
-each repeat is a separate source overlapping the one before it, crossfaded on an
-equal-power curve. Each pass queues the one after next when it ends, which keeps
-half a minute of slack in the chain so a throttled background tab can't starve it
-into a gap. Switching away from the tab parks the audio clock, which both silences
-it and stalls the scheduler; coming back picks up where it left off.
+The track is already cut to loop: tail straight into head, no silence at either
+end of the music. What gets in the way is the mp3 container. `decodeAudioData`
+hands back the raw decoded frames, encoder delay and padding included — 1060992
+samples where only 1057619 are music — so looping the whole buffer would tick
+about 67 ms of silence every time round, and `<audio loop>` is worse.
+
+Apple's encoder records the exact figures in an `iTunSMPB` ID3 comment, so
+`readGapless()` reads them straight out of the bytes before decoding (after which
+they're detached) and `loopWindow()` turns them into `loopStart`/`loopEnd`. Going
+via the decoded duration rather than a sample rate makes it work on a device that
+resamples: the whole raw buffer is `total` samples whatever rate it comes back at,
+which is how a 44.1 kHz file lands on the right frame in a 48 kHz context.
+
+The tag beats measuring the waveform, which was the previous approach and the
+reason the old track ticked. Against a noise-floor search this file overshoots the
+head by 110 samples and leaves 529 of padding on the tail.
 
 ## Notes on the physics
 
