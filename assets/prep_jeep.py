@@ -81,32 +81,108 @@ def key_background(im):
         "RGBA")
 
 
-def defringe(rgb, alpha, tone, tol=26, passes=4):
-    """Peel background-coloured pixels off the silhouette edge.
+def defringe(rgb, alpha, tone):
+    """Replace the halo with a properly estimated alpha edge.
 
-    Keying a white vehicle off a grey backdrop leaves a halo. The anti-aliased pixels
-    between body and background are neither tone, so a band tight enough to spare the
-    white paint lets them through, and they show up as a bright rim once the Jeep is
-    composited over the sand.
+    Keying a vehicle off a flat backdrop leaves a rim of blended pixels which are
+    neither body nor background. Removing them by colour only works where the blend is
+    darker than the paint: the white wheel arches blend towards 222 against a 186
+    backdrop, which is indistinguishable by threshold from slightly-shaded white paint,
+    and a band wide enough to catch it eats the bodywork.
 
-    Removed by colour rather than by eroding the mask: the flag pole is 11px wide and
-    there are features down to 2px, which a blanket erosion would eat. Nothing else on
-    the vehicle is both greyish and within tol of the backdrop — the paint sits at 230+,
-    the pole at 126-148 and the tyres at 106 — so only the halo goes.
+    So they are unmixed instead. Each edge pixel is C = a*F + (1-a)*B for an unknown
+    coverage a, a known backdrop B and a foreground F taken from the nearest interior
+    pixel. Projecting C-B onto F-B recovers a, and the pixel keeps F at that alpha —
+    which is what the artwork would have had over a transparent background. Thin
+    features survive because nothing is eroded; the flag pole is 11px wide and there
+    are 2px details that a blanket erosion would eat.
+
+    Pixels whose neighbourhood is itself near the backdrop tone are left alone: with
+    F close to B there is no direction to project onto and a is meaningless.
     """
-    a = alpha.copy()
-    greyish = (rgb.max(axis=2) - rgb.min(axis=2)) <= 24
-    near_bg = greyish & (np.abs(rgb.mean(axis=2) - tone) <= tol)
+    h, w = alpha.shape
+    op = alpha > 0
+    interior = ndimage.binary_erosion(op, iterations=3)
+    if not interior.any():
+        return alpha, 0
+    # nearest interior pixel for every position, to stand in as the local foreground
+    idx = ndimage.distance_transform_edt(~interior, return_indices=True)[1]
+    F = rgb[idx[0], idx[1]].astype(float)
+    B = np.array([tone, tone, tone], float)
+
+    d = F - B
+    denom = (d * d).sum(axis=2)
+    C = rgb.astype(float) - B
+    a = np.divide((C * d).sum(axis=2), denom, out=np.ones_like(denom),
+                  where=denom > 400)          # |F-B| > 20 per channel, roughly
+    a = np.clip(a, 0.0, 1.0)
+
+    band = op & ~interior & (denom > 400)
+    out_a = alpha.copy().astype(float)
+    out_a[band] = a[band] * 255.0
+    changed = int((np.abs(out_a - alpha) > 8).sum())
+    # take the estimated foreground colour, so what is left is the paint and not a
+    # mixture of paint and backdrop
+    rgb[band] = np.clip(F[band], 0, 255).astype(int)
+
+    # Whatever survives that and is still a small, bright, half-transparent blob is
+    # blend residue rather than artwork — the specks left around the tyres where the
+    # local foreground estimate had nothing dark to project onto. Solid paint is spared
+    # by the alpha test (the wheel arch sits at 255) and the long anti-aliased roofline
+    # by the size test, being one component thousands of pixels long.
+    lum = rgb.mean(axis=2)
+    speck = (out_a > 8) & (out_a < 250) & (lum > 190)
+    lab, n = ndimage.label(speck)
     removed = 0
-    for _ in range(passes):
-        op = a > 0
-        edge = op & ~ndimage.binary_erosion(op)
-        drop = edge & near_bg
-        if not drop.any():
-            break
-        removed += int(drop.sum())
-        a[drop] = 0
-    return a, removed
+    if n:
+        for i in range(1, n + 1):
+            m = lab == i
+            size = int(m.sum())
+            if size <= 120:
+                out_a[m] = 0
+                removed += size
+    # And the small *fully opaque* white marks sitting right on the silhouette edge —
+    # highlight dabs in the pixel art that pass for keying dirt once the vehicle is
+    # over dark sand, which is where the ring of white specks around the tyres came
+    # from. The alpha test above skips them because they are solid; the size cap is
+    # what keeps the white bodywork out of it: measured, the largest such blob anywhere
+    # on the vehicle is 26px, so a 30px cap clears them all without reaching the paint.
+    sat = rgb.max(axis=2) - rgb.min(axis=2)
+    near_edge = ndimage.distance_transform_edt(out_a > 8) <= 3
+    dabs = (out_a > 8) & (lum > 195) & (sat < 40) & near_edge
+    lab2, n2 = ndimage.label(dabs)
+    for i in range(1, n2 + 1):
+        m = lab2 == i
+        size = int(m.sum())
+        if size <= 30:
+            out_a[m] = 0
+            removed += size
+
+    if removed:
+        print(f"  cleared {removed}px of leftover bright speckle")
+    return out_a.astype(np.uint8), changed
+
+
+def bleed_colour(rgb, alpha):
+    """Push the vehicle's colours out into the transparent region.
+
+    Sprites are stored with unpremultiplied alpha, so every downscale — optimise.py's,
+    then the canvas drawing it smaller than stored — mixes the RGB of *transparent*
+    pixels into the semi-transparent edge. Keying only clears alpha, so those pixels
+    still hold the grey backdrop they were cut from, and the Jeep grows a pale rim the
+    moment it is drawn at anything but 1:1. It measures clean at full size, which is
+    what makes it easy to miss.
+
+    Filling the transparent side with the nearest opaque colour leaves nothing but
+    vehicle to bleed. The alpha channel is untouched, so the silhouette is unchanged.
+    """
+    opaque = alpha > 0
+    if not opaque.any():
+        return rgb
+    idx = ndimage.distance_transform_edt(~opaque, return_indices=True)[1]
+    out = rgb.copy()
+    out[~opaque] = rgb[idx[0], idx[1]][~opaque]
+    return out
 
 
 def underside(mask):
@@ -193,8 +269,10 @@ def main():
 
     # Before anything is cut or punched, so the wheel discs inherit a clean rim too.
     # After the wheels are measured, so the geometry comes off the full silhouette.
-    arr[:, :, 3], halo = defringe(arr[:, :, :3].astype(int), arr[:, :, 3], BG_TONE)
-    print(f"  removed {halo}px of background halo from the edges")
+    _rgb = arr[:, :, :3].astype(int)
+    arr[:, :, 3], halo = defringe(_rgb, arr[:, :, 3], BG_TONE)
+    arr[:, :, :3] = _rgb.astype(np.uint8)
+    print(f"  unmixed {halo}px of background halo along the edges")
 
     # A Jeep wheel is solid, so there is nothing to see through it and no reason to
     # redraw it from scratch. Each disc is cut straight out of the artwork here and the
@@ -215,6 +293,8 @@ def main():
         # feathered at the rim, or rotating it shows a jagged edge
         edge = np.clip((r - dist) / 1.5 + 1.0, 0.0, 1.0)
         disc[:, :, 3] = (disc[:, :, 3].astype(float) * edge).astype(np.uint8)
+        disc[:, :, :3] = bleed_colour(disc[:, :, :3].astype(int),
+                                      disc[:, :, 3]).astype(np.uint8)
         out_wheel = os.path.join(HERE, f"jeep-wheel-{name}.png")
         Image.fromarray(disc, "RGBA").save(out_wheel)
         print(f"  cut {os.path.basename(out_wheel)}: {side}x{side}, r {r:.1f}")
@@ -225,6 +305,8 @@ def main():
         punched += int((inside & (arr[:, :, 3] > 0)).sum())
         arr[inside, 3] = 0
     print(f"  punched {punched}px out of the two wheels")
+
+    arr[:, :, :3] = bleed_colour(arr[:, :, :3].astype(int), arr[:, :, 3]).astype(np.uint8)
 
     out = Image.fromarray(arr, "RGBA")
     bbox = out.getbbox()
