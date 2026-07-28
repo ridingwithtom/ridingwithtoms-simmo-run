@@ -1541,6 +1541,14 @@
     // at 130 and the park sign at 180. Side-on, so its base is a genuine ground line
     // and a light bed is all it needs.
     eyreSign:   { h: 165, bed: 0.03 },
+    // The survey post: about 1.4m of timber, so 140px at the bike's 103px to the
+    // metre. Its base is flat and square on, so barely any bed.
+    poeppelPost: { h: 140, bed: 0.05 },
+    // A gantry, and the two legs end at different heights in the image — the right
+    // one 26px above the left at this size, because it's drawn in three-quarter view.
+    // A bed of 0.14 brings the right leg down to the sand and drives the left one a
+    // little deeper in, which is what happens when you plant two posts by hand.
+    poeppelSign: { h: 190, bed: 0.14 },
     // His booted foot touches the bottom edge but the bare one sits 2.8% higher,
     // so a small bed sinks him until both read as planted in the sand.
     brendan:    { h: 210, bed: 0.028 }
@@ -1569,7 +1577,9 @@
     beardie:    loadLandmark('beardie-sprite.png'),
     frillneck:  loadLandmark('frillneck-sprite.png'),
     stumpy:     loadLandmark('stumpy-sprite.png'),
-    eyreSign:   loadLandmark('eyre-creek-sign.png')
+    eyreSign:   loadLandmark('eyre-creek-sign.png'),
+    poeppelPost: loadLandmark('poeppel-post.png'),
+    poeppelSign: loadLandmark('poeppel-sign.png')
   };
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
@@ -1624,7 +1634,14 @@
   const BRENDAN_X = flattestNear(BIG_RED_CREST + 220, 180, 120);
   // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
   // the sign straddled a dune face with a 49px drop across its base.
-  const MACCAS_X = flattestNear(FINISH_DISTANCE * 0.5, 1500, 140);
+  // Out to where the eagle passes, half way between the old spot and Eyre Creek.
+  const MACCAS_X = flattestNear(EAGLE_X, 900, 140);
+
+  // Poeppel Corner takes the Maccas sign's old place at half way — the actual survey
+  // post where three borders meet. The sign stands to its right, which is the way its
+  // arrow points: back at the post.
+  const POEPPEL_POST_X = flattestNear(FINISH_DISTANCE * 0.5, 1200, 60);
+  const POEPPEL_SIGN_X = flattestNear(POEPPEL_POST_X + 215, 90, 190);
 
   // Somebody's Tiger, bogged to the axles a quarter of the way in, planted on
   // level sand so it sits square rather than straddling a dune face.
@@ -2825,6 +2842,8 @@
     drawLandmarkSprite(BOG_TIGER_X, screenYOf, LANDMARKS.bogTiger, LANDMARK_SIZE.bogTiger);
     drawBogSand(screenYOf, true);
     drawLandmarkSprite(MACCAS_X, screenYOf, LANDMARKS.maccasSign, LANDMARK_SIZE.maccasSign);
+    drawLandmarkSprite(POEPPEL_POST_X, screenYOf, LANDMARKS.poeppelPost, LANDMARK_SIZE.poeppelPost);
+    drawLandmarkSprite(POEPPEL_SIGN_X, screenYOf, LANDMARKS.poeppelSign, LANDMARK_SIZE.poeppelSign);
     drawCamp(screenYOf, performance.now() * 0.001);
     drawPub(FINISH_DISTANCE, 'BIRDSVILLE PUB', screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville);
     drawLandmarkSprite(EYRE_SIGN_X, screenYOf, LANDMARKS.eyreSign, LANDMARK_SIZE.eyreSign);

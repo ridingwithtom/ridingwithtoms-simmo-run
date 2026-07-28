@@ -37,6 +37,8 @@ DRAWN_H = {
     "frillneck-sprite.png": 54,
     "stumpy-sprite.png":   18,
     "eyre-creek-sign.png": 165,
+    "poeppel-post.png":    140,
+    "poeppel-sign.png":    190,
 }
 # SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase = 152 / 819
 BIKE_SCALE = 152 / 819

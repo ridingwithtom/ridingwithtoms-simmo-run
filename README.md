@@ -4,7 +4,7 @@ A browser game about crossing the Simpson Desert on a Yamaha WR250R — Mt Dare
 Hotel to Birdsville, 1200 sand dunes, on the back wheel the whole way.
 
 One crossing is one day: the run opens before dawn with the stars still out, the
-sun climbs to noon around the Maccas sign, sets behind Big Red, and you roll into
+sun climbs to noon around Poeppel Corner, sets behind Big Red, and you roll into
 Birdsville under a full moon with the pub letting off fireworks.
 
 Three quarters of the way across you drop into Eyre Creek and wade through it. The
