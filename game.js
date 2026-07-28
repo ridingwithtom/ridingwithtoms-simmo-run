@@ -1537,6 +1537,10 @@
     // align is off for the same reason: tilting the sprite to the local ground chord
     // treats that underside as a ground line, which it isn't.
     bogTiger:   { h: 150, bed: 0.035 },
+    // A post sign, so smaller than the big reflective boards: between the stuck bike
+    // at 130 and the park sign at 180. Side-on, so its base is a genuine ground line
+    // and a light bed is all it needs.
+    eyreSign:   { h: 165, bed: 0.03 },
     // His booted foot touches the bottom edge but the bare one sits 2.8% higher,
     // so a small bed sinks him until both read as planted in the sand.
     brendan:    { h: 210, bed: 0.028 }
@@ -1564,7 +1568,8 @@
     swag:       loadLandmark('swag-sprite.png'),
     beardie:    loadLandmark('beardie-sprite.png'),
     frillneck:  loadLandmark('frillneck-sprite.png'),
-    stumpy:     loadLandmark('stumpy-sprite.png')
+    stumpy:     loadLandmark('stumpy-sprite.png'),
+    eyreSign:   loadLandmark('eyre-creek-sign.png')
   };
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
@@ -1610,6 +1615,11 @@
   // position drops 60 to 120px across the sign's width — so the sign is laid along
   // the slope instead (align, below) rather than hunted for flat sand that isn't
   // there.
+  // On the approach to the crossing, set back from the gums on the near bank so its
+  // post isn't lost among the trunks — the first gum is at about 16890 and the near
+  // shore at 17350.
+  const EYRE_SIGN_X = flattestNear(CREEK_X - 1320, 130, 110);
+
   const BIG_RED_SIGN_X = BIG_RED_CREST - 1500;
   const BRENDAN_X = flattestNear(BIG_RED_CREST + 220, 180, 120);
   // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
@@ -2817,6 +2827,7 @@
     drawLandmarkSprite(MACCAS_X, screenYOf, LANDMARKS.maccasSign, LANDMARK_SIZE.maccasSign);
     drawCamp(screenYOf, performance.now() * 0.001);
     drawPub(FINISH_DISTANCE, 'BIRDSVILLE PUB', screenYOf, LANDMARKS.birdsville, LANDMARK_SIZE.birdsville);
+    drawLandmarkSprite(EYRE_SIGN_X, screenYOf, LANDMARKS.eyreSign, LANDMARK_SIZE.eyreSign);
     drawRiverGums(screenYOf);
     drawLandmarkSprite(BRENDAN_X, screenYOf, LANDMARKS.brendan, LANDMARK_SIZE.brendan);
     drawBigRedSign(screenYOf);
