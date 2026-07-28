@@ -363,6 +363,83 @@ body.on-title #help {
   display: none;
 }
 
+/* ---------- bike picker ---------- */
+/* Down in the sand rather than under the title: the start screen is deliberately
+   bare up top, and this keeps the pub and the bike unobscured. */
+#bike-pick {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(13dvh + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;         /* the overlay above it is inert */
+}
+
+/* Only while the run hasn't started — there's nothing to choose mid-ride. */
+body:not(.on-title) #bike-pick { display: none; }
+
+#bike-pick button {
+  display: block;
+  min-width: 116px;
+  padding: 9px 15px;
+  border: 1.5px solid rgba(255, 248, 236, 0.28);
+  border-radius: 11px;
+  background: rgba(30, 20, 15, 0.44);
+  color: #fff8ec;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#bike-pick .bike-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+#bike-pick .bike-trait {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.62;
+}
+
+#bike-pick button[aria-checked="true"] {
+  border-color: rgba(255, 248, 236, 0.9);
+  background: rgba(255, 248, 236, 0.17);
+}
+
+#bike-pick button[aria-checked="true"] .bike-trait { opacity: 0.85; }
+
+/* Keyboards get the hint; on a touch screen the cards are their own affordance. */
+#bike-pick-hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(8.4dvh + env(safe-area-inset-bottom));
+  color: #fff8ec;
+  opacity: 0.34;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+
+body:not(.on-title) #bike-pick-hint { display: none; }
+
+/* Short screens: the sand is thin, so tuck the picker in and shrink it. */
+@media (max-height: 520px) {
+  #bike-pick { bottom: calc(9dvh + env(safe-area-inset-bottom)); gap: 8px; }
+  #bike-pick button { min-width: 96px; padding: 6px 11px; }
+  #bike-pick .bike-name { font-size: 12px; }
+  #bike-pick .bike-trait { font-size: 9.5px; }
+  #bike-pick-hint { bottom: calc(5dvh + env(safe-area-inset-bottom)); font-size: 10px; }
+}
+
 /* ---------- music toggle ---------- */
 /* pointer-events on, and its own handler stops the event reaching the window
    listener — otherwise tapping it would also lean the bike, and on the title screen

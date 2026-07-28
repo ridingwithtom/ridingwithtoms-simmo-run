@@ -78,6 +78,124 @@
   if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
   resize();
 
+  // ---------- the bikes ----------
+  // Two bikes, two difficulties. Everything that differs between them lives in this
+  // table; the rest of the game reads the selected one through the bindings below,
+  // which useBike() repoints. Those were consts until there were two bikes — keeping
+  // the names meant the sixty-odd places that read them didn't have to change, and
+  // there is only ever one bike on the sand at a time.
+  //
+  // The geometry comes out of assets/prep.py, which measures the contact patches, the
+  // wheel circles and the silhouette's convex hull off the artwork. It is not
+  // guesswork and must not be hand-edited: the contact points set the wheelbase the
+  // physics pivots about, and the hull is what stops a bike rotated past vertical
+  // driving its bars down through the sand.
+  const BIKES = [
+    {
+      id: 'wr250r',
+      name: 'Yamaha WR250R',
+      trait: 'the honest one',
+      src: 'assets/bike.png',
+      wheelbasePx: 152,             // on-screen px between contacts
+      speed: 430,                   // forward speed on dry sand (world px/sec)
+      // Seconds. The run is 59.1s of riding plus 1.3s wading the creek, so this
+      // leaves about 21s of slack, which is roughly four stacks.
+      fuel: 82,
+      // Pitch response is deliberately slow. Holding a wheelie is a balance task, so
+      // the rider needs time to react: with stiff values (14/6/3.2) the nose fell
+      // from a held wheelie to the deck faster than human reaction time, which made
+      // the run unwinnable rather than hard.
+      lean: 7,                      // rider input on the pitch deviation
+      airLean: 2.9,
+      pitchDamp: 2.9,
+      airDamp: 0.9,
+      // True rolling: the contact patch travels at ground speed, or the tyre looks
+      // like it's dragging. With 9 knobs at 430 px/s that advances 29% of a knob
+      // spacing per frame, which reads as unambiguous forward rotation, so the WR
+      // needs no cheat.
+      spin: 1.0,
+      sprite: { w: 1215, h: 856,
+        floorY: 855, rearX: 196, frontX: 1015, wheelbase: 819,
+        wheels: [ { cx: 196, cy: 666, r: 189 }, { cx: 1015, cy: 661, r: 194 } ] },
+      hull: [[0,261],[45,142],[52,127],[60,115],[69,108],[694,0],[707,0],[1086,367],[1108,392],[1114,399],[1119,406],[1122,411],[1202,587],[1209,619],[1214,650],[1214,656],[1209,706],[1203,725],[1189,763],[1177,782],[1158,804],[1145,816],[1114,836],[1078,849],[1042,855],[171,855],[137,849],[117,842],[104,836],[81,823],[58,804],[52,798],[38,781],[25,757],[22,750],[14,731],[7,706],[0,291]]
+    },
+    {
+      id: 'ktm',
+      name: 'KTM',
+      trait: 'twice as fast, twice as mean',
+      // PLACEHOLDER ARTWORK AND GEOMETRY: the KTM sprite isn't in assets/ yet, so this
+      // borrows the WR's. Everything above the sprite line is the real KTM; when the
+      // artwork lands, run it through assets/prep.py and paste the measured floorY,
+      // contact points, wheel circles and hull in, and nothing else here changes.
+      src: 'assets/bike.png',
+      wheelbasePx: 152,
+      speed: 860,                   // twice the WR, so the course goes by in 29.5s
+      // Scaled to keep the same proportional slack as the WR (fuel/run ~ 1.33). Left
+      // at 82 the hard bike would finish a 31s run with 50s in hand and fuel would
+      // stop being a constraint at all, which is not a neutral choice either. This is
+      // the one number to change if two stacks of margin is too mean.
+      fuel: 41,
+      // The sensitivity. Both directions come off this one number, since the rider's
+      // torque is input * lean. At 10 it loops 20% sooner than the WR if you hold the
+      // lean too long; the values on record as unwinnable sat at 33% sooner, and that
+      // was at half this speed. Damping is deliberately left at the WR's: the two
+      // things that make this bike hard are its speed and its lean, not a third
+      // change nobody asked for.
+      lean: 10,
+      airLean: 4.1,                 // same +43% as on the ground
+      pitchDamp: 2.9,
+      airDamp: 0.9,
+      // At its true rate the knobs advance 59% of a knob spacing per frame, past the
+      // 50% where rotation aliases and the wheel reads as spinning backwards. Drawn
+      // at the WR's rate instead — half of true — which puts it back to 29%. The
+      // tyre technically drags, but a wheel doing 3.9 rev/s is a blur and going
+      // visibly backwards is far worse than not matching the sand exactly.
+      spin: 0.5,
+      sprite: { w: 1215, h: 856,
+        floorY: 855, rearX: 196, frontX: 1015, wheelbase: 819,
+        wheels: [ { cx: 196, cy: 666, r: 189 }, { cx: 1015, cy: 661, r: 194 } ] },
+      hull: [[0,261],[45,142],[52,127],[60,115],[69,108],[694,0],[707,0],[1086,367],[1108,392],[1114,399],[1119,406],[1122,411],[1202,587],[1209,619],[1214,650],[1214,656],[1209,706],[1203,725],[1189,763],[1177,782],[1158,804],[1145,816],[1114,836],[1078,849],[1042,855],[171,855],[137,849],[117,842],[104,836],[81,823],[58,804],[52,798],[38,781],[25,757],[22,750],[14,731],[7,706],[0,291]]
+    }
+  ];
+
+  let bike = null;
+  let SPRITE, SPRITE_HULL, BIKE_WHEELBASE, SPRITE_SCALE, HALF_WHEELBASE, SPRITE_MID_X,
+      WHEEL_WORLD_R, BIKE_DRAW_W, BIKE_ANCHOR_TO_LEFT, RIDE_SPEED, FUEL_START,
+      LEAN_TORQUE, AIR_LEAN_TORQUE, PITCH_DAMPING, AIR_DAMPING, SPIN_READABILITY;
+
+  for (const b of BIKES) {
+    b.img = new Image();
+    b.ready = false;
+    b.img.onload = () => { b.ready = true; };
+    b.img.src = b.src;
+  }
+
+  function useBike(b) {
+    bike = b;
+    SPRITE = b.sprite;
+    SPRITE_HULL = b.hull;
+    BIKE_WHEELBASE = b.wheelbasePx;
+    SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase;
+    HALF_WHEELBASE = BIKE_WHEELBASE / 2;
+    SPRITE_MID_X = (SPRITE.rearX + SPRITE.frontX) / 2;
+    WHEEL_WORLD_R = SPRITE.wheels[0].r * SPRITE_SCALE;   // for rolling speed
+    BIKE_DRAW_W = SPRITE.w * SPRITE_SCALE;
+    // The sprite is pinned by a contact point, not its middle, so its extents have to
+    // come from the geometry rather than being assumed symmetric about the anchor.
+    BIKE_ANCHOR_TO_LEFT = HALF_WHEELBASE + SPRITE.rearX * SPRITE_SCALE;
+    RIDE_SPEED = b.speed;
+    FUEL_START = b.fuel;
+    LEAN_TORQUE = b.lean;
+    AIR_LEAN_TORQUE = b.airLean;
+    PITCH_DAMPING = b.pitchDamp;
+    AIR_DAMPING = b.airDamp;
+    SPIN_READABILITY = b.spin;
+  }
+  let savedBike = null;
+  try { savedBike = localStorage.getItem('simmoBike'); } catch (_) {}
+  useBike(BIKES.find((b) => b.id === savedBike) || BIKES[0]);
+
+
   // ---------- music ----------
   // Web Audio rather than <audio loop>, because looping an mp3 is not sample-exact.
   // The encoder brackets the music with frames of its own: this file decodes to
@@ -312,10 +430,75 @@
     applyMusicButton();
   }
 
+  // ---------- bike picker ----------
+  // Built from BIKES rather than written out in index.html, so a bike can't appear in
+  // the table without appearing on the start screen. Only shown before a run starts.
+  const bikePick = document.getElementById('bike-pick');
+
+  function paintBikePick() {
+    if (!bikePick) return;
+    for (const el of bikePick.children) {
+      el.setAttribute('aria-checked', el.dataset.bike === bike.id ? 'true' : 'false');
+    }
+  }
+
+  // Switching bike changes the wheelbase the chassis pivots about, the fuel and the
+  // speed, so the parked bike has to be re-seated: resetRun is exactly that, and we
+  // are on the title screen already.
+  function pickBike(id) {
+    const found = BIKES.find((b) => b.id === id);
+    if (!found || found === bike) return;
+    useBike(found);
+    try { localStorage.setItem('simmoBike', found.id); } catch (_) {}
+    paintBikePick();
+    resetRun();
+  }
+
+  if (bikePick) {
+    for (const b of BIKES) {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.dataset.bike = b.id;
+      el.setAttribute('role', 'radio');
+      const name = document.createElement('span');
+      name.className = 'bike-name';
+      name.textContent = b.name;
+      const trait = document.createElement('span');
+      trait.className = 'bike-trait';
+      trait.textContent = b.trait;
+      el.append(name, trait);
+      // stopPropagation, or picking a bike also starts the run: the window handler
+      // treats any pointerdown on the title screen as "go".
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        el.blur();                  // don't leave it holding focus for Enter to hit
+        pickBike(b.id);
+      });
+      bikePick.append(el);
+    }
+    paintBikePick();
+
+    const hint = document.createElement('p');
+    hint.id = 'bike-pick-hint';
+    hint.innerHTML = '<span class="kbd-only">\u2190 \u2192 to change bike</span>' +
+                     '<span class="touch-only">tap a bike to change</span>';
+    bikePick.parentNode.insertBefore(hint, bikePick.nextSibling);
+  }
+
   // ---------- input (lean only + space) ----------
   const keys = { ArrowUp: false, ArrowDown: false };
   window.addEventListener('keydown', (e) => {
     if (e.key in keys) { keys[e.key] = true; e.preventDefault(); return; }
+    if (state.mode === 'title' &&
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === '1' || e.key === '2')) {
+      const at = BIKES.indexOf(bike);
+      const to = e.key === '1' ? 0 : e.key === '2' ? 1
+               : (at + (e.key === 'ArrowRight' ? 1 : BIKES.length - 1)) % BIKES.length;
+      if (BIKES[to]) pickBike(BIKES[to].id);
+      e.preventDefault();
+      return;
+    }
     if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
       startMusic();
@@ -398,12 +581,7 @@
   const FINISH_DISTANCE = 25400;
   const TOTAL_DUNES = 1200;
 
-  const RIDE_SPEED = 430;          // forward speed on dry sand (world px/sec)
   const WATER_DRAG = 0.46;         // share of speed lost at full wading depth
-  // Seconds. The run is 59.1s of riding plus 1.3s wading the creek, so this leaves
-  // about 21s of slack — the same margin as before the course was lengthened, which
-  // is roughly four stacks.
-  const FUEL_START = 82;
   const CRASH_FUEL_PENALTY = 5;
   const CRASH_RECOVERY_TIME = 1.4;
   const CELEBRATION_TIME = 6.0;      // seconds of fireworks before the end screen
@@ -776,25 +954,6 @@
   // Geometry measured from assets/bike.png by assets/prep.py: the tyre contact
   // points, plus each wheel circle (whose interior prep.py punched out so we can
   // draw a spinning rim/spokes underneath and let it show through the tyre).
-  const SPRITE = {
-    w: 1215, h: 856,
-    floorY: 855, rearX: 196, frontX: 1015, wheelbase: 819,
-    wheels: [ { cx: 196, cy: 666, r: 189 }, { cx: 1015, cy: 661, r: 194 } ]
-  };
-  const BIKE_WHEELBASE = 152;                       // on-screen px between contacts
-  const SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase;
-  const HALF_WHEELBASE = BIKE_WHEELBASE / 2;
-  const SPRITE_MID_X = (SPRITE.rearX + SPRITE.frontX) / 2;
-  const WHEEL_WORLD_R = SPRITE.wheels[0].r * SPRITE_SCALE;   // for rolling speed
-  // True rolling: the contact patch must travel at ground speed or the tyres
-  // look like they are dragging. With only 9 knobs this still reads as forward
-  // rotation (29% of a knob spacing per frame), so no cheat is needed.
-  const SPIN_READABILITY = 1.0;
-
-  const bikeImg = new Image();
-  let bikeReady = false;
-  bikeImg.onload = () => { bikeReady = true; };
-  bikeImg.src = 'assets/bike.png';
 
   let wheelSpin = 0;
 
@@ -1026,9 +1185,8 @@
   // A bike rotated past vertical would drive its bars and luggage down through
   // the sand if we kept pinning the tyre to the ground, so work out how far its
   // lowest point now hangs below the pivot and lift it clear. This uses the
-  // silhouette's convex hull (measured by prep.py) rather than the image bounding
-  // box, whose corners are transparent and would lift the bike into the air.
-  const SPRITE_HULL = [[0,261],[45,142],[52,127],[60,115],[69,108],[694,0],[707,0],[1086,367],[1108,392],[1114,399],[1119,406],[1122,411],[1202,587],[1209,619],[1214,650],[1214,656],[1209,706],[1203,725],[1189,763],[1177,782],[1158,804],[1145,816],[1114,836],[1078,849],[1042,855],[171,855],[137,849],[117,842],[104,836],[81,823],[58,804],[52,798],[38,781],[25,757],[22,750],[14,731],[7,706],[0,291]];
+  // silhouette's convex hull (measured by prep.py, see BIKES) rather than the image
+  // bounding box, whose corners are transparent and would lift the bike into the air.
   const CRASH_BED_IN = 10;            // sprite px it settles into the sand
 
   function restLift(angle, contactX) {
@@ -1045,7 +1203,7 @@
   let bikeXform = null;
 
   function drawBike(pivotScreenX, pivotScreenY, angle, contactX) {
-    if (!bikeReady) return;
+    if (!bike.ready) return;
     bikeXform = { px: pivotScreenX, py: pivotScreenY, angle, contactX };
     ctx.save();
     ctx.translate(pivotScreenX, pivotScreenY);
@@ -1059,7 +1217,7 @@
     // natural size would tie the geometry below to whatever resolution bike.png
     // happens to be stored at, so shipping a downscaled sprite would shrink the
     // body while the procedural wheels stayed put.
-    ctx.drawImage(bikeImg, 0, 0, SPRITE.w, SPRITE.h);
+    ctx.drawImage(bike.img, 0, 0, SPRITE.w, SPRITE.h);
     ctx.restore();
   }
 
@@ -1104,7 +1262,7 @@
   function drawBikeLights(cyc, t) {
     // come on as the sun drops, full once it is down
     const lvl = clamp((0.20 - cyc.sunAlt) / 0.32, 0, 1);
-    if (lvl < 0.02 || !bikeXform || !bikeReady) return;
+    if (lvl < 0.02 || !bikeXform || !bike.ready) return;
     const xf = bikeXform;
     const [hx, hy] = spriteToScreen(LAMP_POS.x, LAMP_POS.y, xf);
     const [tx, ty] = spriteToScreen(TAIL_POS.x, TAIL_POS.y, xf);
@@ -2301,10 +2459,6 @@
   // off, so the scene settles into its riding framing without a jump.
   const START_SHIFT_EASE = 2.6;      // per second
 
-  // The sprite is pinned by a contact point, not its middle, so its extents have
-  // to come from the geometry rather than being assumed symmetric about the anchor.
-  const BIKE_DRAW_W = SPRITE.w * SPRITE_SCALE;
-  const BIKE_ANCHOR_TO_LEFT = HALF_WHEELBASE + SPRITE.rearX * SPRITE_SCALE;
   const PAIR_GAP = 16;
   const ARRIVE_APPROACH = 900;       // world px over which the ending reframes
 
@@ -2400,14 +2554,7 @@
   }
 
   // The bike is nearly inverted before it lets go — very forgiving on angle.
-  // Pitch response is deliberately slow. Holding a wheelie is a balance task, so
-  // the rider needs time to react: with the old stiff values (14/6/3.2) the nose
-  // fell from a held wheelie to the deck faster than human reaction time, which
-  // made the run unwinnable rather than hard.
-  const LEAN_TORQUE = 7;         // rider input on the pitch deviation
-  const AIR_LEAN_TORQUE = 2.9;
-  const PITCH_DAMPING = 2.9;
-  const AIR_DAMPING = 0.9;
+  // The four pitch-response numbers are per-bike; see BIKES.
 
   // Gravity acting on the bike's mass about the rear contact patch, rather than a
   // linear spring. A spring's restoring torque grows without limit, so the further

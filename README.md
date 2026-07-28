@@ -18,6 +18,22 @@ the join. It only downloads once you tap or press space, so it never holds up th
 first paint, and the speaker button in the bottom right corner turns it off — the
 choice sticks in `localStorage`.
 
+## Two bikes
+
+Pick one on the start screen — arrow keys on a keyboard, tap a card on a phone; the
+choice sticks in `localStorage`.
+
+| | WR250R | KTM |
+|---|---|---|
+| speed | 430 px/s | 860 px/s |
+| the course takes | 62s | 31s |
+| fuel | 82s | 41s |
+| lean torque | 7 | 10 |
+
+Everything that differs lives in the `BIKES` table in `game.js`. The lean number is
+the sensitivity: both directions come off it, since the rider's torque is
+`input * lean`. It was set from measurement rather than feel — see the physics notes.
+
 ## Controls
 
 | | Keyboard | Touch |
@@ -109,6 +125,40 @@ master's gapless information on decode and would otherwise bake its padding in a
 real silence, permanently. Measured against the master, the encode is faithful to
 about 15 kHz and rolls off above 16 kHz, where the master itself was already 56 dB
 down.
+
+## Notes on the difficulty
+
+The playable band is a pitch between −1.5 and −0.06 rad, with an *unstable*
+equilibrium at `COM_ANGLE − π/2` = −0.941: above it gravity pulls the nose down,
+below it gravity drives you over backwards. So the rider is balancing on a knife
+edge the whole way, and difficulty is how quickly that edge throws you off.
+
+Two numbers measure it, by integrating the pitch equation on flat ground:
+
+| | do nothing → front wheel down | hold full lean-back → loops |
+|---|---|---|
+| WR250R (7) | 1.10s | 0.92s |
+| KTM (10) | 1.10s | 0.73s |
+| the values on record as unwinnable (14/3.2) | 1.15s | 0.62s |
+
+That last row is the calibration: a comment in `game.js` records 14/6/3.2 as having
+made the run "unwinnable rather than hard", and it measures at a 0.62s loop margin —
+67% of the WR's. The KTM sits at 80%, and gets the rest of its difficulty from
+covering ground twice as fast. Damping is deliberately left at the WR's value, so
+the only things that differ are the speed and the lean.
+
+Doubling the speed has two consequences worth knowing:
+
+- **Big Red sends it 946px instead of 430px**, landing far enough down the face that
+  the slope there is −0.53 rad rather than −0.17. Landing pitch is attitude minus
+  ground angle, so that eats 0.36 rad of the tolerance: on the KTM, holding a wheelie
+  steeper than about −0.92 rad over Big Red is a guaranteed stack on touchdown. It
+  lands *on* the sand — swept every attitude, zero penetration — it's the landing
+  tolerance biting, not a clipping bug.
+- **The wheel would spin backwards.** 9 knobs at 860 px/s advance 59% of a knob
+  spacing per frame, past the 50% where rotation aliases. The KTM's wheel is drawn at
+  half its true rate, which puts it back to the WR's 29%. The tyre technically drags,
+  but a wheel doing 3.9 rev/s is a blur and going visibly backwards is much worse.
 
 ## Notes on the physics
 
