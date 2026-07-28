@@ -1326,20 +1326,59 @@
 
   // Swags rather than tents: what you actually sleep in out here. Drawn from the
   // sprite, mirrored on one of them so the pair doesn't read as a copy-paste.
+  //
+  // Like the tiger it's a three-quarter view, so only the near corner of the base
+  // reaches the bottom of the image — the back corner sits 28% of the drawn height
+  // higher, and hung in the air. Bedding the whole sprite down by that much would
+  // bury the groundsheet and most of the canvas with it, so instead a wedge of sand
+  // is laid behind it, rising to meet the back corner. Same idea as the bogged tiger,
+  // and it's what the ground actually does behind something lying on soft sand.
+  const SWAG_BACK_RISE = 0.28;      // back corner's height, as a share of drawn height
+  const SWAG_SAND_FADE = 0.20;      // taper past the sprite, in sprite widths
+
   function drawSwag(x, groundY, h, flip) {
     const lm = LANDMARKS.swag;
     if (!lm || !lm.ready || !lm.img.naturalHeight) return;
     const w = lm.img.naturalWidth * (h / lm.img.naturalHeight);
 
-    ctx.save();
-    ctx.translate(x, groundY);
+    // contact shadow
     ctx.save();
     ctx.filter = 'blur(2px)';
     ctx.beginPath();
-    ctx.ellipse(0, -1, w * 0.40, 4.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, groundY - 1, w * 0.40, 4.5, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(20,10,5,0.28)';
     ctx.fill();
     ctx.restore();
+
+    // Sand behind the swag, rising to meet the raised back corner and tapering off
+    // past both ends so it never shows a vertical edge. Built in screen space rather
+    // than inside the sprite's transform: sandGradient() is defined in screen
+    // coordinates, so under a translate — let alone the mirror — it would land
+    // somewhere else entirely.
+    const cover = (u) => {
+      const r = clamp((u - 0.46) / 0.54, 0, 1);
+      const base = h * (0.02 + SWAG_BACK_RISE * Math.pow(r, 1.5));
+      const over = u < 0 ? -u : (u > 1 ? u - 1 : 0);
+      const e = clamp(over / SWAG_SAND_FADE, 0, 1);
+      return base * (1 - e * e * (3 - 2 * e));
+    };
+    const uToX = (u) => flip ? x + w / 2 - u * w : x - w / 2 + u * w;
+
+    ctx.beginPath();
+    ctx.moveTo(uToX(-SWAG_SAND_FADE), groundY + 1);
+    for (let i = 0; i <= 24; i++) {
+      const u = -SWAG_SAND_FADE + (i / 24) * (1 + 2 * SWAG_SAND_FADE);
+      ctx.lineTo(uToX(u), groundY - cover(u));
+    }
+    ctx.lineTo(uToX(1 + SWAG_SAND_FADE), groundY + 1);
+    ctx.closePath();
+    ctx.fillStyle = sandGradient();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(74,32,12,0.18)';
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(x, groundY);
     if (flip) ctx.scale(-1, 1);
     ctx.drawImage(lm.img, -w / 2, -h, w, h);
     ctx.restore();
