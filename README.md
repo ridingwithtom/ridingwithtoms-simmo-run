@@ -61,7 +61,7 @@ Re-run it after changing `game.js`, `index.html`, `style.css` or any sprite —
     build.py                       assembles docs/
     docs/                          built site — served by GitHub Pages
 
-Everything in `assets/` other than the nine sprites listed in `build.py` is
+Everything in `assets/` other than the sprites listed in `build.py` is
 source material: original photos, un-keyed screenshots, the sunset reference.
 None of it is loaded at runtime and none of it ships.
 

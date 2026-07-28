@@ -1384,6 +1384,56 @@
     ctx.restore();
   }
 
+  // ---------- reptiles ----------
+  // Basking on the near face of the dunes, below the line the bike rides along.
+  //
+  // Sized from life against the bike, which is 2.19m long drawn 226 world px — so
+  // 103px to the metre. A bearded dragon is about 55cm nose to tail tip, a
+  // frilled-neck 80, a shingleback 42, which is 57, 83 and 43px at that scale. Each
+  // then gets a 1.3x for sitting nearer the camera than the ridge. They come out
+  // properly small: the shingleback is a quarter of the bike's length, which is what
+  // it should be.
+  //
+  // Widths, not heights, because a lizard's length is the dimension that reads, and
+  // the sprites span nose to tail tip.
+  const REPTILE_W = { beardie: 74, frillneck: 107, stumpy: 56 };
+
+  const REPTILES = [
+    { kind: 'stumpy',    at: 0.08, drop: 95,  flip: false },
+    { kind: 'beardie',   at: 0.17, drop: 132, flip: false },
+    { kind: 'frillneck', at: 0.28, drop: 78,  flip: false },
+    { kind: 'stumpy',    at: 0.50, drop: 148, flip: true  },
+    { kind: 'beardie',   at: 0.62, drop: 104, flip: true  },
+    { kind: 'frillneck', at: 0.93, drop: 118, flip: false }
+  ];
+
+  function drawReptiles(screenYOf) {
+    for (const r of REPTILES) {
+      const lm = LANDMARKS[r.kind];
+      if (!lm || !lm.ready || !lm.img.naturalHeight) continue;
+      const wx = FINISH_DISTANCE * r.at;
+      const w = REPTILE_W[r.kind];
+      const h = lm.img.naturalHeight * (w / lm.img.naturalWidth);
+      const sx = (wx - state.cameraX) + W * BIKE_SCREEN_FRAC;
+      if (sx + w < -40 || sx - w > W + 40) continue;
+      const y = screenYOf(nearTerrain(wx)) + r.drop;
+
+      ctx.save();
+      ctx.filter = 'blur(1.5px)';
+      ctx.beginPath();
+      ctx.ellipse(sx, y - 1, w * 0.34, Math.max(2, h * 0.10), 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(20,10,5,0.26)';
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(sx, y);
+      if (r.flip) ctx.scale(-1, 1);
+      ctx.drawImage(lm.img, -w / 2, -h, w, h);
+      ctx.restore();
+    }
+  }
+
   function drawCamp(screenYOf, t) {
     const sx = (CAMP_X - state.cameraX) + W * BIKE_SCREEN_FRAC;
     if (sx < -320 || sx > W + 320) return;
@@ -1511,7 +1561,10 @@
     brendan:    loadLandmark('brendan-sprite.png'),
     riverGum:   loadLandmark('river-gum.png'),
     dingo:      loadLandmark('dingo-sprite.png'),
-    swag:       loadLandmark('swag-sprite.png')
+    swag:       loadLandmark('swag-sprite.png'),
+    beardie:    loadLandmark('beardie-sprite.png'),
+    frillneck:  loadLandmark('frillneck-sprite.png'),
+    stumpy:     loadLandmark('stumpy-sprite.png')
   };
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and
@@ -2790,6 +2843,8 @@
       ctx.lineTo(sx, sy - s * 0.4);
       ctx.stroke();
     }
+
+    drawReptiles(screenYOf);
 
     return screenYOf;
   }
