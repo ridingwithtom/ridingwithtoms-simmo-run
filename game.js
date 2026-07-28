@@ -81,21 +81,24 @@
   // ---------- music ----------
   // Web Audio rather than <audio loop>, because looping an mp3 is not sample-exact.
   // The encoder brackets the music with a few thousand frames of its own: this file
-  // decodes to 1060992 samples of which only 1057619 are music, so looping the whole
-  // buffer would tick about 67ms of silence every time round. Nothing here trims the
-  // track itself - it is already cut to loop cleanly, tail straight into head with no
-  // silence at either end of the music. All that has to happen is skipping the
-  // container's padding.
+  // decodes to 4233600 samples of which only 4230476 are music, so looping the whole
+  // buffer would tick about 71ms of silence every time round. Nothing here trims the
+  // track itself - there is no silence at either end of the music. All that has to
+  // happen is skipping the container's padding.
+  //
+  // At 95.9s the track outlasts the 82s fuel budget, so the join is never reached
+  // inside a single run. It is still reached by anyone who keeps playing across
+  // several runs, which is why the loop has to be clean rather than merely rare.
   //
   // Apple's encoder writes the exact figures into an iTunSMPB comment, which beats
   // hunting for them in the waveform: measured against the samples, a noise-floor
   // search overshoots the head by 110 samples and leaves 529 of padding on the tail.
   // The tag lands on the frame the loop was actually cut at.
   //
-  // Fetched on the first gesture rather than at load. It's 0.8MB against 0.71MB for
-  // the whole rest of the site, and there's no reason for it to delay the game
-  // appearing.
-  const MUSIC_URL = 'assets/kookaburra.mp3';
+  // Fetched on the first gesture rather than at load. At 3.0MB against 0.71MB for
+  // the whole rest of the site it dwarfs the game, so loading it up front would be
+  // the difference between appearing at once and appearing after a wait.
+  const MUSIC_URL = 'assets/kookaburralonger.mp3';
   const MUSIC_LEVEL = 0.34;
   const MUSIC_FADE_IN = 1.6;        // seconds, so it doesn't slam in
   let audioCtx = null, musicGain = null, musicStarted = false, musicLoading = false;

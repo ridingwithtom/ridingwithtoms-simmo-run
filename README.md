@@ -12,8 +12,9 @@ water is translucent, so the bed, the fish and the submerged half of the bike al
 show through it, and it drags the bike down to a little over half speed — which
 costs you fuel you don't get back.
 
-The soundtrack is `assets/kookaburra.mp3`, twenty-four seconds of desert dawn on a
-loop. It only downloads once you tap or press space, so it never holds up the
+The soundtrack is `assets/kookaburralonger.mp3`, ninety-six seconds of desert dawn
+on a loop — long enough that it outlasts the fuel budget, so a run never reaches
+the join. It only downloads once you tap or press space, so it never holds up the
 first paint, and the speaker button in the bottom right corner turns it off — the
 choice sticks in `localStorage`.
 
@@ -74,9 +75,9 @@ None of it is loaded at runtime and none of it ships.
 
 The track is already cut to loop: tail straight into head, no silence at either
 end of the music. What gets in the way is the mp3 container. `decodeAudioData`
-hands back the raw decoded frames, encoder delay and padding included — 1060992
-samples where only 1057619 are music — so looping the whole buffer would tick
-about 67 ms of silence every time round, and `<audio loop>` is worse.
+hands back the raw decoded frames, encoder delay and padding included — 4233600
+samples where only 4230476 are music — so looping the whole buffer would tick
+about 71 ms of silence every time round, and `<audio loop>` is worse.
 
 Apple's encoder records the exact figures in an `iTunSMPB` ID3 comment, so
 `readGapless()` reads them straight out of the bytes before decoding (after which
@@ -86,8 +87,14 @@ resamples: the whole raw buffer is `total` samples whatever rate it comes back a
 which is how a 44.1 kHz file lands on the right frame in a 48 kHz context.
 
 The tag beats measuring the waveform, which was the previous approach and the
-reason the old track ticked. Against a noise-floor search this file overshoots the
-head by 110 samples and leaves 529 of padding on the tail.
+reason an earlier track ticked: against a noise-floor search that file overshot the
+head by 110 samples and left 529 of padding on the tail.
+
+Nothing crossfades the join, deliberately. The track ends on a fade to −31 dB and
+opens at −12 dB, an 18.7 dB step, so looping it reads as a restart rather than a
+continuation — but there is no click (the sample step across the join is smaller
+than 99% of the track's own) and no gap, and at 95.9 s against an 82 s fuel budget
+a run never gets there. Only a session spanning several runs does.
 
 ## Notes on the physics
 

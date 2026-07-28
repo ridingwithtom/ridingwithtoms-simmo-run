@@ -27,7 +27,7 @@ EXTRA = ["manifest.webmanifest"]
 ICONS = ["icon-180.png", "icon-192.png", "icon-512.png"]
 # Copied verbatim — optimise.py only knows how to handle images, and the track is
 # fetched on the first gesture rather than at load, so its size never delays the game.
-AUDIO = ["kookaburra.mp3"]
+AUDIO = ["kookaburralonger.mp3"]
 # Everything game.js actually loads. Keep this in step with LANDMARKS in game.js.
 ASSETS = [
     "bike.png", "mt-dare-hotel.png", "birdsville-pub.png", "big-red-sign.png",
