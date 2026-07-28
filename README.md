@@ -12,8 +12,8 @@ water is translucent, so the bed, the fish and the submerged half of the bike al
 show through it, and it drags the bike down to a little over half speed — which
 costs you fuel you don't get back.
 
-The soundtrack is `assets/kookaburralonger.mp3`, ninety-six seconds of desert dawn
-on a loop — long enough that it outlasts the fuel budget, so a run never reaches
+The soundtrack is `assets/kookaburralonger.128.mp3`, ninety-six seconds of desert
+dawn on a loop — long enough that it outlasts the fuel budget, so a run never reaches
 the join. It only downloads once you tap or press space, so it never holds up the
 first paint, and the speaker button in the bottom right corner turns it off — the
 choice sticks in `localStorage`.
@@ -63,6 +63,8 @@ Re-run it after changing `game.js`, `index.html`, `style.css` or any sprite —
       prep_gum.py                  the river gum needs its scale-reference figure
                                    removed as well, and it is joined to the tree
                                    through the dirt mound, so --largest can't do it
+      encode_music.py              trims the soundtrack master by its gapless tag
+                                   and re-encodes at 128 kbps (needs ffmpeg + lame)
       optimise.py                  downscales and quantises for the web
     build.py                       assembles docs/
     docs/                          built site — served by GitHub Pages
@@ -73,28 +75,40 @@ None of it is loaded at runtime and none of it ships.
 
 ## Notes on the music
 
-The track is already cut to loop: tail straight into head, no silence at either
-end of the music. What gets in the way is the mp3 container. `decodeAudioData`
-hands back the raw decoded frames, encoder delay and padding included — 4233600
-samples where only 4230476 are music — so looping the whole buffer would tick
-about 71 ms of silence every time round, and `<audio loop>` is worse.
+The track is already cut to loop: tail straight into head, no silence at either end
+of the music. What gets in the way is the mp3 container, which brackets the audio
+with frames the encoder needs and the music doesn't.
 
-Apple's encoder records the exact figures in an `iTunSMPB` ID3 comment, so
-`readGapless()` reads them straight out of the bytes before decoding (after which
-they're detached) and `loopWindow()` turns them into `loopStart`/`loopEnd`. Going
-via the decoded duration rather than a sample rate makes it work on a device that
-resamples: the whole raw buffer is `total` samples whatever rate it comes back at,
-which is how a 44.1 kHz file lands on the right frame in a 48 kHz context.
+Two encoders write those figures in two different places — Apple into an `iTunSMPB`
+ID3 comment, lame into its own extension inside the first audio frame — so
+`readGapless()` reads the bytes before decoding (after which they're detached) and
+handles either. Both count samples at the file's own rate, which comes back too.
 
-The tag beats measuring the waveform, which was the previous approach and the
-reason an earlier track ticked: against a noise-floor search that file overshot the
-head by 110 samples and left 529 of padding on the tail.
+The part that is easy to get wrong: **decoders disagree about whether they apply
+that information themselves.** Chrome honours lame's tag and hands back only the
+music; it ignores Apple's and hands back everything. Trimming on top of a decoder
+that already trimmed silently eats real audio — 1972 frames of it here. So
+`loopWindow()` compares the length that came back against the length the file says
+it holds, and only trims if nothing has yet. Verified both ways round, in 44.1 kHz
+and 48 kHz contexts: both land on exactly 4230476 frames of music.
+
+Going through the decoded duration rather than a sample rate is what keeps a
+44.1 kHz file landing on the right frame in a 48 kHz context.
 
 Nothing crossfades the join, deliberately. The track ends on a fade to −31 dB and
 opens at −12 dB, an 18.7 dB step, so looping it reads as a restart rather than a
 continuation — but there is no click (the sample step across the join is smaller
 than 99% of the track's own) and no gap, and at 95.9 s against an 82 s fuel budget
 a run never gets there. Only a session spanning several runs does.
+
+`assets/encode_music.py` makes the shipped file from the master. The master is
+265 kbps out of Final Cut, which is 3.0 MB — four times the rest of the site, for
+birdsong played at a third volume — so it goes down to 128 kbps CBR and 1.47 MB.
+The trim has to happen *before* re-encoding, because ffmpeg does not apply the
+master's gapless information on decode and would otherwise bake its padding in as
+real silence, permanently. Measured against the master, the encode is faithful to
+about 15 kHz and rolls off above 16 kHz, where the master itself was already 56 dB
+down.
 
 ## Notes on the physics
 

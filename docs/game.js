@@ -80,11 +80,11 @@
 
   // ---------- music ----------
   // Web Audio rather than <audio loop>, because looping an mp3 is not sample-exact.
-  // The encoder brackets the music with a few thousand frames of its own: this file
-  // decodes to 4233600 samples of which only 4230476 are music, so looping the whole
-  // buffer would tick about 71ms of silence every time round. Nothing here trims the
-  // track itself - there is no silence at either end of the music. All that has to
-  // happen is skipping the container's padding.
+  // The encoder brackets the music with frames of its own: this file decodes to
+  // 4232448 samples of which only 4230476 are music, so looping the whole buffer
+  // would tick about 45ms of silence every time round. Nothing here trims the track
+  // itself - there is no silence at either end of the music. All that has to happen
+  // is skipping the container's padding.
   //
   // At 95.9s the track outlasts the 82s fuel budget, so the join is never reached
   // inside a single run. It is still reached by anyone who keeps playing across
@@ -95,53 +95,132 @@
   // search overshoots the head by 110 samples and leaves 529 of padding on the tail.
   // The tag lands on the frame the loop was actually cut at.
   //
-  // Fetched on the first gesture rather than at load. At 3.0MB against 0.71MB for
-  // the whole rest of the site it dwarfs the game, so loading it up front would be
+  // Fetched on the first gesture rather than at load. Even at 128 kbps it's 1.5MB
+  // against 0.71MB for the whole rest of the site, so loading it up front would be
   // the difference between appearing at once and appearing after a wait.
-  const MUSIC_URL = 'assets/kookaburralonger.mp3';
+  const MUSIC_URL = 'assets/kookaburralonger.128.mp3';
   const MUSIC_LEVEL = 0.34;
   const MUSIC_FADE_IN = 1.6;        // seconds, so it doesn't slam in
   let audioCtx = null, musicGain = null, musicStarted = false, musicLoading = false;
   let musicOn = false;
   try { musicOn = localStorage.getItem('simmoMusic') !== 'off'; } catch (_) { musicOn = true; }
 
-  // Encoder delay, padding and true sample count, as hex fields in an ID3 comment.
+  // How many frames of the decoded buffer are the encoder's rather than the music's.
   // Read before decoding, because decodeAudioData takes ownership of the bytes and
-  // detaches them. Returns sample counts at the file's own rate, not the context's.
+  // detaches them. Two encoders, two places to look: Apple writes the figures into
+  // an iTunSMPB ID3 comment, lame into its own extension inside the first audio
+  // frame. Both count samples at the file's rate, so that comes back too.
   function readGapless(bytes) {
     const head = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 1 << 16));
-    const needle = 'iTunSMPB';
-    let at = -1;
-    for (let i = 0; i + needle.length < head.length && at < 0; i++) {
-      let hit = true;
-      for (let j = 0; j < needle.length; j++) {
-        if (head[i + j] !== needle.charCodeAt(j)) { hit = false; break; }
+    const has = (at, text) => {
+      for (let j = 0; j < text.length; j++) {
+        if (head[at + j] !== text.charCodeAt(j)) return false;
       }
-      if (hit) at = i;
+      return true;
+    };
+    const find = (text, from, to) => {
+      for (let i = Math.max(0, from); i < Math.min(to, head.length) - text.length; i++) {
+        if (has(i, text)) return i;
+      }
+      return -1;
+    };
+
+    // ID3v2 length is stored seven bits to the byte, so it can't contain a false sync
+    let skip = 0;
+    if (has(0, 'ID3')) {
+      skip = 10 + (((head[6] & 0x7f) << 21) | ((head[7] & 0x7f) << 14) |
+                   ((head[8] & 0x7f) << 7) | (head[9] & 0x7f));
     }
-    if (at < 0) return null;
-    let txt = '';
-    for (let i = at; i < Math.min(head.length, at + 200); i++) {
-      const c = head[i];
-      txt += (c >= 32 && c < 127) ? String.fromCharCode(c) : ' ';
+    let frame = -1;
+    for (let i = skip; i < head.length - 4 && frame < 0; i++) {
+      if (head[i] === 0xFF && (head[i + 1] & 0xE0) === 0xE0) frame = i;
     }
-    const f = txt.match(/[0-9A-Fa-f]{8,16}/g);
-    if (!f || f.length < 4) return null;
-    const delay = parseInt(f[1], 16), pad = parseInt(f[2], 16), real = parseInt(f[3], 16);
-    if (!(delay >= 0 && pad >= 0 && real > 0)) return null;
-    return { delay: delay, pad: pad, real: real, total: delay + real + pad };
+    if (frame < 0) return null;
+    const RATES = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000],
+                    0: [11025, 12000, 8000] };
+    const rates = RATES[(head[frame + 1] >> 3) & 3];
+    const rateIdx = (head[frame + 2] >> 2) & 3;
+    if (!rates || rateIdx === 3) return null;
+    const rate = rates[rateIdx];
+    // samples per frame: layer III carries 1152, halved outside MPEG1
+    const perFrame = ((head[frame + 1] >> 3) & 3) === 3 ? 1152 : 576;
+
+    // The Xing/Info header's frame count says how long the file is before anything is
+    // trimmed. loopWindow needs it to work out whether the decoder trimmed already.
+    let xing = find('Xing', frame, frame + 500);
+    if (xing < 0) xing = find('Info', frame, frame + 500);
+    let frames = 0;
+    if (xing >= 0 && (head[xing + 7] & 1)) {
+      frames = ((head[xing + 8] << 24) | (head[xing + 9] << 16) |
+                (head[xing + 10] << 8) | head[xing + 11]) >>> 0;
+    }
+    const ok = (delay, pad) =>
+      delay >= 0 && pad >= 0 && delay < rate && pad < rate * 2
+        ? { delay: delay, pad: pad, rate: rate, perFrame: perFrame, frames: frames }
+        : null;
+
+    // Apple: an ID3 comment of hex fields, of which the 2nd and 3rd are what we want.
+    // Searched only inside the tag, so a run of hex in the audio can't masquerade.
+    const smpb = find('iTunSMPB', 0, skip);
+    if (smpb >= 0) {
+      let txt = '';
+      for (let i = smpb; i < Math.min(head.length, smpb + 200); i++) {
+        const c = head[i];
+        txt += (c >= 32 && c < 127) ? String.fromCharCode(c) : ' ';
+      }
+      const f = txt.match(/[0-9A-Fa-f]{8,16}/g);
+      if (f && f.length >= 4) {
+        const got = ok(parseInt(f[1], 16), parseInt(f[2], 16));
+        if (got) return got;
+      }
+    }
+
+    // lame: 21 bytes past its version string, delay and padding share three bytes as
+    // 12 bits each. The version string sits after the Xing/Info header found above.
+    if (xing >= 0) {
+      const lame = find('LAME', xing, frame + 500);
+      if (lame >= 0 && lame + 24 <= head.length) {
+        const b1 = head[lame + 21], b2 = head[lame + 22], b3 = head[lame + 23];
+        const got = ok((b1 << 4) | (b2 >> 4), ((b2 & 0xF) << 8) | b3);
+        if (got) return got;
+      }
+    }
+    return null;
   }
 
-  // The tag counts samples at 44.1k; decodeAudioData may have resampled to whatever
-  // the device runs at. Going through the decoded duration converts without needing
-  // to know either rate: the whole raw buffer is `total` samples either way.
+  // Decoders disagree about whether they apply gapless information themselves. Chrome
+  // honours lame's tag and hands back only the music; it ignores Apple's iTunSMPB and
+  // hands back everything. Trimming on top of a decoder that already trimmed eats real
+  // audio - 1972 frames of it here - so rather than trust either behaviour, compare the
+  // length that came back against the length the file says it holds.
+  //
+  // Both are measured in seconds off the decoded duration, which is the buffer's true
+  // length however the device chose to resample it. That's what keeps a 44.1kHz file
+  // landing on the right frame in a 48kHz context without knowing either rate.
   function loopWindow(buf, tag) {
-    if (!tag || !(tag.total > 0)) return { start: 0, end: buf.duration };
-    const perSample = buf.duration / tag.total;
-    const start = tag.delay * perSample;
-    const end = (tag.delay + tag.real) * perSample;
-    if (!(end > start) || end > buf.duration + 1e-6) return { start: 0, end: buf.duration };
-    return { start: start, end: end };
+    const whole = { start: 0, end: buf.duration };
+    if (!tag || !tag.frames) return whole;
+
+    const cut = (tag.delay + tag.pad) / tag.rate;         // what the encoder added
+    if (cut <= 0) return whole;
+    // Encoders disagree by one on whether the header frame counts toward the total, so
+    // accept either. If that ambiguity is as large as the trim itself there's nothing to
+    // tell apart and the whole buffer is the safe answer.
+    const rawA = tag.frames * tag.perFrame / tag.rate;
+    const rawB = (tag.frames - 1) * tag.perFrame / tag.rate;
+    const frameSeconds = tag.perFrame / tag.rate;
+    if (Math.abs(cut - frameSeconds) < 0.004 || cut < 0.004) return whole;
+
+    const near = (a, b) => Math.abs(a - b) < 0.004;       // ~176 samples at 44.1k
+    const raw = near(buf.duration, rawA) ? rawA : near(buf.duration, rawB) ? rawB : null;
+    if (raw !== null) {
+      // untrimmed: the encoder's frames are still in there, so skip them
+      const start = tag.delay / tag.rate;
+      const end = buf.duration - tag.pad / tag.rate;
+      return end > start ? { start: start, end: end } : whole;
+    }
+    if (near(buf.duration, rawA - cut) || near(buf.duration, rawB - cut)) return whole;
+    return whole;                                          // unrecognised, don't guess
   }
 
   function startMusic() {
