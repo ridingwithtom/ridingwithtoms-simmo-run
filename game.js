@@ -2164,6 +2164,15 @@
     };
   }
 
+  // Airborne, the bike is drawn pinned at the mid-point between its two contact
+  // patches, so once it is rotated the lower wheel hangs below that pivot by this
+  // much. Flight has to be measured to that wheel rather than to the pivot: at the
+  // 41 degrees it holds off Big Red the rear wheel sits 50px below the mid-point, so
+  // touching down when the mid-point reached the sand buried the wheel 23.5px.
+  function contactHang(angle) {
+    return HALF_WHEELBASE * Math.abs(Math.sin(angle));
+  }
+
   function contactAngleAt(worldX) {
     return chassisAt(worldX).angle;
   }
@@ -2265,6 +2274,9 @@
       if (!state.airborne) {
         state.airborne = true;
         state.angleVel = state.pitchVel;
+        // start where the grounded draw left it — low wheel on the sand, not the
+        // mid-point — or the first frame of flight sinks a wheel 18px under
+        state.airY = contactHang(state.angle);
         const strength = Math.min(state.climbAccum, 420);
         state.airVel = 70 + strength * 2.0 + state.speed * 0.25;
       }
@@ -2286,7 +2298,7 @@
       state.airVel -= GRAVITY * dt;
       state.airY += state.airVel * dt;
       const impactSpeed = Math.abs(state.airVel);
-      if (state.airY <= 0) {
+      if (state.airY <= contactHang(state.angle)) {
         state.airY = 0;
         state.airVel = 0;
         state.airborne = false;
@@ -2959,7 +2971,10 @@
   }
 
   function step(now) {
-    const dt = Math.min(0.033, (now - lastTime) / 1000);
+    // Clamped at both ends. The upper bound stops a long stall teleporting the bike;
+    // the lower one guards against the clock going backwards, which drives particle
+    // lifetimes negative and throws on the first negative arc radius.
+    const dt = Math.max(0, Math.min(0.033, (now - lastTime) / 1000));
     lastTime = now;
     reconcileSize();
 
