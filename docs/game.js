@@ -1101,18 +1101,66 @@
   // no dirt of its own, so without this it reads as parked rather than bogged.
   // The mound's underside traces the terrain exactly so it blends into the sand
   // instead of sitting on it as a slab.
+  // The tiger is a three-quarter view, so its underside is not a line: only the near
+  // front wheel reaches the bottom of the image, while the whole far side of the bike
+  // — about 45% of the width — sits 34 to 50px higher, where a photograph would show
+  // ground receding behind it. On a flat 2D terrain there is nothing back there, so
+  // the bike hangs in the air however deep it is bedded. A bell-shaped heap can't
+  // reach it either: solving for the best bed and bell still left 34px of daylight.
+  //
+  // So the sand is shaped from the sprite's own underside, measured off the alpha
+  // channel as a fraction of the drawn height. Capped, because the last thing on the
+  // left is the pannier at 0.61 of the height — luggage hangs above the ground, and
+  // chasing it would bury the bike to the seat.
+  // Capped at 0.64 and then smoothed, in that order — smoothing the raw profile would
+  // let the pannier drag a step into its neighbours. Each pass then applies its own,
+  // lower cap on top.
+  const TIGER_UNDERSIDE = [0.612, 0.606, 0.518, 0.336, 0.244, 0.261, 0.300, 0.318,
+                           0.303, 0.285, 0.276, 0.265, 0.220, 0.131, 0.060, 0.029,
+                           0.011, 0.007, 0.016, 0.036, 0.075, 0.136, 0.190];
+  const TIGER_SAND_FADE = 0.30;     // width of the taper past the sprite, in sprite widths
+  // Two caps, because the two passes do different jobs. The front heap is drawn over
+  // the bike, so piling it to the pannier's 0.61 would bury the bike past the seat.
+  // The rear heap is drawn behind, so it can run right up under the luggage and fill
+  // the sky that was showing through there without covering anything.
+  const TIGER_CAP_FRONT = 0.35;
+  const TIGER_CAP_BEHIND = 0.64;
+
   function drawBogSand(screenYOf, front) {
     const sx = (BOG_TIGER_X - state.cameraX) + W * BIKE_SCREEN_FRAC;
     if (sx < -300 || sx > W + 300) return;
     const gy = (dx) => screenYOf(nearTerrain(BOG_TIGER_X + dx));
 
-    // bell-shaped heap, taller at the wheels
-    const span = 104;
+    const lm = LANDMARKS.bogTiger, cfg = LANDMARK_SIZE.bogTiger;
+    const th = cfg.h;
+    const tw = (lm && lm.ready && lm.img.naturalHeight)
+      ? lm.img.naturalWidth * (th / lm.img.naturalHeight) : th * 0.94;
+    const bedPx = th * (cfg.bed || 0);
+
+    // How high the sand has to stand at dx to leave no daylight under the bike, and
+    // then tapered away past the sprite's ends. Returning zero out there instead left
+    // a 31px vertical cliff at the sprite's left edge, which read as a cut block of
+    // sand rather than a drift.
+    const cover = (dx, cap) => {
+      const u = (dx + tw / 2) / tw;
+      const f = clamp(u, 0, 1) * (TIGER_UNDERSIDE.length - 1);
+      const i = Math.min(TIGER_UNDERSIDE.length - 2, Math.floor(f));
+      const k = f - i;
+      const v = Math.min(TIGER_UNDERSIDE[i] + (TIGER_UNDERSIDE[i + 1] - TIGER_UNDERSIDE[i]) * k, cap);
+      const over = u < 0 ? -u : (u > 1 ? u - 1 : 0);
+      const e = clamp(over / TIGER_SAND_FADE, 0, 1);
+      const fade = 1 - e * e * (3 - 2 * e);
+      return (v * th - bedPx + 4) * fade;
+    };
+
+    // bell-shaped drift, which carries the sand out past the bike either side
+    const span = 132;
     const profile = (dx) => {
       const a = Math.exp(-Math.pow((dx + 44) / 34, 2));   // rear wheel
       const b = Math.exp(-Math.pow((dx - 40) / 32, 2));   // front wheel
       const base = Math.exp(-Math.pow(dx / 82, 2)) * 0.45;
-      return (Math.max(a, b) + base) * (front ? 26 : 15);
+      const bell = (Math.max(a, b) + base) * (front ? 26 : 15);
+      return Math.max(bell, cover(dx, front ? TIGER_CAP_FRONT : TIGER_CAP_BEHIND));
     };
 
     // Filled with the ground's own gradient and then tinted, rather than with a flat
