@@ -471,8 +471,9 @@
 
   // ---------- day cycle ----------
   // One Simpson crossing = one day. Sunrise as you leave Mt Dare, the sun at its
-  // peak by the maccas sign, setting over Big Red, and full dark by Birdsville.
-  const NOON_P   = 11680 / FINISH_DISTANCE;   // the maccas sign
+  // peak on the run between the maccas sign and Poeppel Corner, setting over Big
+  // Red, and full dark by Birdsville.
+  const NOON_P   = 11680 / FINISH_DISTANCE;   // between the maccas sign and Poeppel
   const SUNSET_P = BIG_RED_X / FINISH_DISTANCE;
 
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -525,7 +526,7 @@
   function dayCycle() {
     const p = clamp(state.cameraX / FINISH_DISTANCE, 0, 1);
 
-    // sun climbs to the maccas sign, then falls to the horizon at Big Red
+    // sun climbs to half way, then falls to the horizon at Big Red
     let sunAlt;
     // starts a touch below the horizon: the run opens pre-dawn with the stars
     // still out, and the sun breaks the horizon a few seconds in
@@ -1225,8 +1226,8 @@
   // ---------- wedge-tailed eagle ----------
   // Soars past about a quarter of the way across, on its own slow parallax so it
   // reads as high up rather than nearby.
-  // Between the Maccas sign at half way and Eyre Creek. CREEK_X is an absolute
-  // position while the Maccas sign tracks the course length, so this is written as
+  // Between Poeppel Corner at half way and Eyre Creek. CREEK_X is an absolute
+  // position while Poeppel Corner tracks the course length, so this is written as
   // the midpoint of the two rather than as a fraction that would drift apart from
   // them if the run were lengthened again.
   const EAGLE_X = (FINISH_DISTANCE * 0.5 + CREEK_X) / 2;
@@ -1787,16 +1788,17 @@
 
   const BIG_RED_SIGN_X = BIG_RED_CREST - 1500;
   const BRENDAN_X = flattestNear(BIG_RED_CREST + 220, 180, 120);
-  // Halfway across, nudged to whatever level ground is nearby: at exactly 50%
-  // the sign straddled a dune face with a 49px drop across its base.
-  // Out to where the eagle passes, half way between the old spot and Eyre Creek.
-  const MACCAS_X = flattestNear(EAGLE_X, 900, 140);
-
-  // Poeppel Corner takes the Maccas sign's old place at half way — the actual survey
-  // post where three borders meet. The sign stands to its right, which is the way its
-  // arrow points: back at the post.
+  // Half way across: the actual survey post where three borders meet. The sign stands
+  // to its right, which is the way its arrow points: back at the post.
   const POEPPEL_POST_X = flattestNear(FINISH_DISTANCE * 0.5, 1200, 60);
   const POEPPEL_SIGN_X = flattestNear(POEPPEL_POST_X + 215, 90, 190);
+
+  // Back from the eagle to the long empty stretch between the camel and Poeppel
+  // Corner, which had nothing in it. Taken as the midpoint of the two rather than a
+  // fixed distance so it stays centred between them if either moves, then nudged to
+  // whatever level ground is within 900: the sign is a flat-bottomed board on posts
+  // and a dune face leaves it see-sawing.
+  const MACCAS_X = flattestNear((CAMEL_X + POEPPEL_POST_X) / 2, 900, 140);
 
   // Somebody's Tiger, bogged to the axles a quarter of the way in, planted on
   // level sand so it sits square rather than straddling a dune face.
