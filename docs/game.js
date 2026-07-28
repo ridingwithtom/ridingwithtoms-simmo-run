@@ -118,11 +118,13 @@
       wheelArtSrc: ['assets/jeep-wheel-rear.png', 'assets/jeep-wheel-front.png'],
       wheelFace: 'disc',
       frontWheelSpins: true,
-      // Measured off the sprite: the tail lamp is the small red block low on the rear
-      // body at (76, 487), and the headlight sits in the grille just inside the
-      // frontmost bodywork, which runs y 481-516 at x 900.
+      // Measured off the sprite. The tail lamp is the 152px block of saturated red on
+      // the rear pillar at (64, 418) — the first attempt sat 69px lower, on the small
+      // reflector down on the bumper, which is a separate cluster at (48, 512). The
+      // headlight is in the grille just inside the frontmost bodywork, which runs
+      // y 481-516 at x 900.
       lamp: { x: 888, y: 470 },
-      tail: { x: 76, y: 487 },
+      tail: { x: 64, y: 418 },
       sprite: { w: 906, h: 655,
         floorY: 653.5, rearX: 208.6, frontX: 750.7, wheelbase: 542.1,
         wheels: [ { cx: 208.6, cy: 564.1, r: 89.3 }, { cx: 750.7, cy: 553.0, r: 100.5 } ] },

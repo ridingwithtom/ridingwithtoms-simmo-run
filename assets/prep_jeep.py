@@ -41,6 +41,7 @@ INNER = 0.99          # punch the whole wheel out; the game draws a spinning one
 BAND = 14             # how far from the median background tone still counts as sky
 SPREAD_MAX = 14       # and how colourless it has to be
 ARC = 70              # px either side of a contact patch to fit that tyre's arc
+BG_TONE = 186.0       # learned from the border by key_background()
 
 
 def key_background(im):
@@ -71,11 +72,41 @@ def key_background(im):
     dropped = int((opaque & (lab != keep)).sum())
     opaque = lab == keep
 
+    global BG_TONE
+    BG_TONE = tone
     print(f"  background tone {tone:.0f}, keyed {tone - BAND:.0f}-{tone + BAND:.0f}; "
           f"dropped {dropped}px outside the main blob; {opaque.mean() * 100:.1f}% opaque")
     return Image.fromarray(
         np.dstack([np.asarray(im.convert("RGB")), np.where(opaque, 255, 0).astype(np.uint8)]),
         "RGBA")
+
+
+def defringe(rgb, alpha, tone, tol=26, passes=4):
+    """Peel background-coloured pixels off the silhouette edge.
+
+    Keying a white vehicle off a grey backdrop leaves a halo. The anti-aliased pixels
+    between body and background are neither tone, so a band tight enough to spare the
+    white paint lets them through, and they show up as a bright rim once the Jeep is
+    composited over the sand.
+
+    Removed by colour rather than by eroding the mask: the flag pole is 11px wide and
+    there are features down to 2px, which a blanket erosion would eat. Nothing else on
+    the vehicle is both greyish and within tol of the backdrop — the paint sits at 230+,
+    the pole at 126-148 and the tyres at 106 — so only the halo goes.
+    """
+    a = alpha.copy()
+    greyish = (rgb.max(axis=2) - rgb.min(axis=2)) <= 24
+    near_bg = greyish & (np.abs(rgb.mean(axis=2) - tone) <= tol)
+    removed = 0
+    for _ in range(passes):
+        op = a > 0
+        edge = op & ~ndimage.binary_erosion(op)
+        drop = edge & near_bg
+        if not drop.any():
+            break
+        removed += int(drop.sum())
+        a[drop] = 0
+    return a, removed
 
 
 def underside(mask):
@@ -159,6 +190,11 @@ def main():
     arr = np.array(level)
     h, w = arr.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w]
+
+    # Before anything is cut or punched, so the wheel discs inherit a clean rim too.
+    # After the wheels are measured, so the geometry comes off the full silhouette.
+    arr[:, :, 3], halo = defringe(arr[:, :, :3].astype(int), arr[:, :, 3], BG_TONE)
+    print(f"  removed {halo}px of background halo from the edges")
 
     # A Jeep wheel is solid, so there is nothing to see through it and no reason to
     # redraw it from scratch. Each disc is cut straight out of the artwork here and the
