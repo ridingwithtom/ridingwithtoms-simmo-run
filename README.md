@@ -30,7 +30,9 @@ up is the surprise.
 | speed | 430 px/s | 860 px/s |
 | the course takes | 62s | 31s |
 | fuel | 82s | 41s |
-| lean torque | 7 | 10 |
+| lean torque | 7 | 20 |
+| pitch damping | 2.9 | 2.2 |
+| input ramp | 7 | 11 |
 
 Everything that differs lives in the `BIKES` table in `game.js`. The lean number is
 the sensitivity: both directions come off it, since the rider's torque is
@@ -137,17 +139,23 @@ edge the whole way, and difficulty is how quickly that edge throws you off.
 
 Two numbers measure it, by integrating the pitch equation on flat ground:
 
-| | do nothing → front wheel down | hold full lean-back → loops |
-|---|---|---|
-| WR250R (7) | 1.10s | 0.92s |
-| KTM (10) | 1.10s | 0.73s |
-| the values on record as unwinnable (14/3.2) | 1.15s | 0.62s |
+| | do nothing → front wheel down | hold full lean-back → loops | corrections a run asks for |
+|---|---|---|---|
+| Easy (7 / 2.9 / 7) | 1.10s | 0.92s | ~64 |
+| Hard (20 / 2.2 / 11) | 1.00s | 0.45s | ~66 |
+| on record as unwinnable (14 / 3.2) | 1.15s | 0.62s | ~96 |
 
-That last row is the calibration: a comment in `game.js` records 14/6/3.2 as having
-made the run "unwinnable rather than hard", and it measures at a 0.62s loop margin —
-67% of the WR's. The KTM sits at 80%, and gets the rest of its difficulty from
-covering ground twice as fast. Damping is deliberately left at the WR's value, so
-the only things that differ are the speed and the lean.
+The last column is the one that matters, and it corrected a mistake. Twitchiness on
+its own is misleading, because a shorter run needs fewer saves: what a run really
+asks of you is about its length divided by how long you can hold the lean before it
+loops. Hard's first draft ran at lean 10, which measured as satisfyingly twitchy —
+but over a 30s course it needed only ~40 clean corrections against Easy's ~64. It was
+the *easier* bike to balance and merely the faster one to ride.
+
+At 20/2.2/11 it loops in 0.45s, half of Easy's margin, which lands at ~66 corrections
+— past Easy, so it is now harder in both dimensions. The ceiling is the row a comment
+in `game.js` records as "unwinnable rather than hard": that bike demanded ~96, so
+there is headroom left if it still isn't mean enough.
 
 Doubling the speed has two consequences worth knowing:
 

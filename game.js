@@ -111,6 +111,7 @@
       airLean: 2.9,
       pitchDamp: 2.9,
       airDamp: 0.9,
+      leanLag: 7,                   // how fast the rider's weight shift ramps in
       // True rolling: the contact patch travels at ground speed, or the tyre looks
       // like it's dragging. With 9 knobs at 430 px/s that advances 29% of a knob
       // spacing per frame, which reads as unambiguous forward rotation, so the WR
@@ -124,7 +125,7 @@
     {
       id: 'ktm',
       name: 'Hard',
-      trait: 'twice as fast, twitchier',
+      trait: 'twice as fast, on a knife edge',
       // PLACEHOLDER ARTWORK AND GEOMETRY: the KTM sprite isn't in assets/ yet, so this
       // borrows the WR's. Everything above the sprite line is the real KTM; when the
       // artwork lands, run it through assets/prep.py and paste the measured floorY,
@@ -137,16 +138,24 @@
       // stop being a constraint at all, which is not a neutral choice either. This is
       // the one number to change if two stacks of margin is too mean.
       fuel: 41,
-      // The sensitivity. Both directions come off this one number, since the rider's
-      // torque is input * lean. At 10 it loops 20% sooner than the WR if you hold the
-      // lean too long; the values on record as unwinnable sat at 33% sooner, and that
-      // was at half this speed. Damping is deliberately left at the WR's: the two
-      // things that make this bike hard are its speed and its lean, not a third
-      // change nobody asked for.
-      lean: 10,
-      airLean: 4.1,                 // same +43% as on the ground
-      pitchDamp: 2.9,
+      // The sensitivity, and the thing that actually makes this the hard mode.
+      //
+      // Raw twitchiness on its own was misleading. What a run really asks of you is
+      // roughly (its length) / (how long you can hold the lean before it loops): the
+      // WR needs about 64 clean corrections, and at lean 10 this bike needed only 40,
+      // because the course goes by in half the time. It was the easier bike to
+      // balance and only the faster one to ride.
+      //
+      // At 20/2.2/11 it loops in 0.45s against the WR's 0.92s, which works out at
+      // about 66 corrections: past the WR, so it is harder in both dimensions now.
+      // The reference for too far is a comment in this file recording 14/6/3.2 as
+      // "unwinnable rather than hard" — that bike demanded about 96, so there is
+      // still real headroom above this.
+      lean: 20,
+      airLean: 8.2,                 // held at 0.41 of the grounded figure
+      pitchDamp: 2.2,               // settles itself less, so it wanders
       airDamp: 0.9,
+      leanLag: 11,                  // input bites faster: less feathering it in
       // At its true rate the knobs advance 59% of a knob spacing per frame, past the
       // 50% where rotation aliases and the wheel reads as spinning backwards. Drawn
       // at the WR's rate instead — half of true — which puts it back to 29%. The
@@ -163,7 +172,8 @@
   let bike = null;
   let SPRITE, SPRITE_HULL, BIKE_WHEELBASE, SPRITE_SCALE, HALF_WHEELBASE, SPRITE_MID_X,
       WHEEL_WORLD_R, BIKE_DRAW_W, BIKE_ANCHOR_TO_LEFT, RIDE_SPEED, FUEL_START,
-      LEAN_TORQUE, AIR_LEAN_TORQUE, PITCH_DAMPING, AIR_DAMPING, SPIN_READABILITY;
+      LEAN_TORQUE, AIR_LEAN_TORQUE, PITCH_DAMPING, AIR_DAMPING, SPIN_READABILITY,
+      LEAN_LAG;
 
   for (const b of BIKES) {
     b.img = new Image();
@@ -192,6 +202,7 @@
     PITCH_DAMPING = b.pitchDamp;
     AIR_DAMPING = b.airDamp;
     SPIN_READABILITY = b.spin;
+    LEAN_LAG = b.leanLag;
   }
   let savedBike = null;
   try { savedBike = localStorage.getItem('simmoBike'); } catch (_) {}
@@ -2785,7 +2796,7 @@
     if (keys.ArrowUp) leanTarget += 1;
     if (keys.ArrowDown) leanTarget -= 1;
     if (!leanTarget) leanTarget = touchLeanSum();
-    state.leanInput += (leanTarget - state.leanInput) * Math.min(1, dt * 7);
+    state.leanInput += (leanTarget - state.leanInput) * Math.min(1, dt * LEAN_LAG);
 
     // Dune crest launches the bike. Waiting for the elevation to actually start
     // falling launches far too late on Big Red: its summit is rounded over about
