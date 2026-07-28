@@ -362,3 +362,43 @@ body.on-title #progress-hud,
 body.on-title #help {
   display: none;
 }
+
+/* ---------- music toggle ---------- */
+/* pointer-events on, and its own handler stops the event reaching the window
+   listener — otherwise tapping it would also lean the bike, and on the title screen
+   would start the run. */
+#music-toggle {
+  position: absolute;
+  right: calc(14px + env(safe-area-inset-right));
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid rgba(255,248,236,0.32);
+  border-radius: 50%;
+  background: rgba(30, 20, 15, 0.42);
+  color: #fff8ec;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#music-toggle svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#music-toggle .cone { fill: currentColor; stroke: none; }
+#music-toggle .cross { display: none; }
+
+/* muted: drop the waves, show the cross, and dim the whole thing */
+#music-toggle.muted { opacity: 0.6; }
+#music-toggle.muted .wave { display: none; }
+#music-toggle.muted .cross { display: inline; }

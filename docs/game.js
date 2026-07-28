@@ -17,6 +17,7 @@
   const deadScreen = document.getElementById('dead-screen');
   const finishTimeEl = document.getElementById('finish-time');
   const deadDetailEl = document.getElementById('dead-detail');
+  const musicToggle = document.getElementById('music-toggle');
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -77,12 +78,176 @@
   if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
   resize();
 
+  // ---------- music ----------
+  // Web Audio rather than <audio loop>. The file carries a LAME tag but no Xing
+  // header, so a decoder can't apply the encoder's gapless information and element
+  // looping leaves its padding in — an audible tick every 30 seconds. Decoding to a
+  // buffer and looping the source is sample-accurate, and the padding can be measured
+  // off the samples and skipped with loopStart/loopEnd.
+  //
+  // Fetched on the first gesture rather than at load. It's 727KB against 0.71MB for
+  // the whole rest of the site, and there's no reason for it to delay the game
+  // appearing.
+  const MUSIC_URL = 'assets/Kookaburra_Dawn.mp3';
+  const MUSIC_LEVEL = 0.34;
+  const MUSIC_FADE_IN = 1.6;        // seconds, so it doesn't slam in
+  let audioCtx = null, musicGain = null, musicStarted = false, musicLoading = false;
+  let musicOn = false;
+  try { musicOn = localStorage.getItem('simmoMusic') !== 'off'; } catch (_) { musicOn = true; }
+
+  // First and last sample above the noise floor. Only used when the quiet stretch is
+  // short enough to be encoder padding — a track that genuinely fades in would
+  // measure the same way, and trimming that would cut the fade off.
+  function loopPoints(buf) {
+    const thresh = 0.004, n = buf.length, sr = buf.sampleRate;
+    let first = n, last = 0;
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < n; i++) if (Math.abs(d[i]) > thresh) { if (i < first) first = i; break; }
+      for (let i = n - 1; i >= 0; i--) if (Math.abs(d[i]) > thresh) { if (i > last) last = i; break; }
+    }
+    if (first >= last) return { start: 0, end: buf.duration };
+    const head = first / sr, tail = (n - 1 - last) / sr;
+    return {
+      start: head < 0.5 ? Math.max(0, head - 0.005) : 0,
+      end: tail < 0.5 ? Math.min(buf.duration, (last + 1) / sr + 0.005) : buf.duration
+    };
+  }
+
+  // The track wasn't written as a loop: it ends about 5 dB louder than it starts,
+  // so joining the end straight back onto the head steps the level down audibly
+  // every thirty seconds. Instead each repeat is its own source, started early
+  // enough to overlap the one before it, and the two are crossfaded on an
+  // equal-power curve so the join has no dip and no seam.
+  const MUSIC_XFADE = 1.5;
+  const XFADE_STEPS = 64;
+  let musicBuf = null, loopFrom = 0, loopLen = 0, passLen = 0, nextPassAt = 0;
+  let fadeIn = null, fadeOut = null;
+
+  function buildCurves() {
+    fadeIn = new Float32Array(XFADE_STEPS);
+    fadeOut = new Float32Array(XFADE_STEPS);
+    for (let i = 0; i < XFADE_STEPS; i++) {
+      const t = i / (XFADE_STEPS - 1);
+      fadeIn[i] = Math.sqrt(t);
+      fadeOut[i] = Math.sqrt(1 - t);
+    }
+  }
+
+  // One playthrough of the trimmed region, fading in over its head and out over
+  // its tail. Queues the pass after next when it ends, which keeps exactly one
+  // repeat scheduled ahead - about thirty seconds of slack, so a throttled
+  // background tab can't starve the chain into a gap.
+  function schedulePass(at) {
+    const src = audioCtx.createBufferSource();
+    const g = audioCtx.createGain();
+    src.buffer = musicBuf;
+    src.connect(g);
+    g.connect(musicGain);
+    g.gain.setValueAtTime(0, at);
+    g.gain.setValueCurveAtTime(fadeIn, at, MUSIC_XFADE);
+    g.gain.setValueCurveAtTime(fadeOut, at + passLen, MUSIC_XFADE);
+    src.start(at, loopFrom, loopLen);
+    src.onended = () => { try { g.disconnect(); } catch (_) {} queueAhead(); };
+  }
+
+  // The window has to reach past a whole pass, or the repeat after the one now
+  // playing never gets queued and its start time falls into the past. A pass ends
+  // one crossfade after the next one began, so onended has passLen - MUSIC_XFADE
+  // of slack to queue the one after that: about half a minute.
+  function queueAhead() {
+    if (!musicBuf || !musicStarted) return;
+    const horizon = audioCtx.currentTime + passLen + MUSIC_XFADE + 1;
+    while (nextPassAt < horizon) {
+      schedulePass(nextPassAt);
+      nextPassAt += passLen;
+    }
+  }
+
+  function startMusic() {
+    if (musicStarted || musicLoading || !musicOn) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    musicLoading = true;
+
+    audioCtx = audioCtx || new Ctx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    fetch(MUSIC_URL)
+      .then((r) => r.arrayBuffer())
+      .then((bytes) => new Promise((res, rej) => {
+        // the callback form, because Safari's decodeAudioData returns nothing
+        const p = audioCtx.decodeAudioData(bytes, res, rej);
+        if (p && p.then) p.then(res, rej);
+      }))
+      .then((buf) => {
+        musicLoading = false;
+        if (!musicOn) return;                       // muted while it was loading
+        const { start, end } = loopPoints(buf);
+        musicBuf = buf;
+        loopFrom = start;
+        loopLen = end - start;
+        passLen = loopLen - MUSIC_XFADE;
+        buildCurves();
+        musicGain = audioCtx.createGain();
+        musicGain.gain.value = 0;
+        musicGain.connect(audioCtx.destination);
+        musicStarted = true;
+        nextPassAt = audioCtx.currentTime + 0.05;
+        queueAhead();
+        const now = audioCtx.currentTime;
+        musicGain.gain.setValueAtTime(0, now);
+        musicGain.gain.linearRampToValueAtTime(MUSIC_LEVEL, now + MUSIC_FADE_IN);
+      })
+      .catch(() => { musicLoading = false; });      // no music is not a broken game
+  }
+
+  function applyMusicButton() {
+    if (!musicToggle) return;
+    musicToggle.classList.toggle('muted', !musicOn);
+    musicToggle.setAttribute('aria-label',
+      musicOn ? 'Turn the music off' : 'Turn the music on');
+  }
+
+  if (musicToggle) {
+    // stopPropagation, or this tap also leans the bike and starts the run
+    musicToggle.addEventListener('pointerdown', (e) => e.stopPropagation());
+    musicToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      musicOn = !musicOn;
+      try { localStorage.setItem('simmoMusic', musicOn ? 'on' : 'off'); } catch (_) {}
+      applyMusicButton();
+      if (musicOn) {
+        if (musicStarted && musicGain) {
+          const now = audioCtx.currentTime;
+          musicGain.gain.cancelScheduledValues(now);
+          musicGain.gain.setValueAtTime(musicGain.gain.value, now);
+          musicGain.gain.linearRampToValueAtTime(MUSIC_LEVEL, now + 0.4);
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          queueAhead();
+        } else {
+          startMusic();
+        }
+      } else if (musicGain) {
+        const now = audioCtx.currentTime;
+        musicGain.gain.cancelScheduledValues(now);
+        musicGain.gain.setValueAtTime(musicGain.gain.value, now);
+        musicGain.gain.linearRampToValueAtTime(0, now + 0.4);
+        // then park the clock, so it isn't scheduling repeats nobody can hear.
+        // currentTime stops while suspended, which stalls queueAhead by itself.
+        setTimeout(() => { if (!musicOn && audioCtx) audioCtx.suspend(); }, 450);
+      }
+    });
+    applyMusicButton();
+  }
+
   // ---------- input (lean only + space) ----------
   const keys = { ArrowUp: false, ArrowDown: false };
   window.addEventListener('keydown', (e) => {
     if (e.key in keys) { keys[e.key] = true; e.preventDefault(); return; }
     if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
+      startMusic();
       if (state.mode === 'title') startRun();
       else if (state.mode === 'finished' || state.mode === 'dead') resetRun();
     }
@@ -120,6 +285,7 @@
   }
 
   window.addEventListener('pointerdown', (e) => {
+    startMusic();
     const starting = state.mode === 'title' || state.mode === 'finished'
                   || state.mode === 'dead';
     if (starting && e.pointerType !== 'mouse') tryFullscreen();

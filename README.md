@@ -12,6 +12,11 @@ water is translucent, so the bed, the fish and the submerged half of the bike al
 show through it, and it drags the bike down to a little over half speed — which
 costs you fuel you don't get back.
 
+The soundtrack is `assets/Kookaburra_Dawn.mp3`, thirty seconds of desert dawn on a
+loop. It only downloads once you tap or press space, so it never holds up the
+first paint, and the speaker button in the bottom right corner turns it off — the
+choice sticks in `localStorage`.
+
 ## Controls
 
 | | Keyboard | Touch |
@@ -35,8 +40,8 @@ Then open <http://localhost:8080>.
 
 ## Building for the web
 
-`docs/` is the deployable site: the three code files plus only the nine sprites
-the game actually loads, downscaled to the size they're drawn at and
+`docs/` is the deployable site: the three code files, the soundtrack, plus only
+the sprites the game actually loads, downscaled to the size they're drawn at and
 palette-quantised. That takes the payload from 5.25 MB to 0.38 MB, which matters
 a lot on mobile data.
 
@@ -64,6 +69,17 @@ Re-run it after changing `game.js`, `index.html`, `style.css` or any sprite —
 Everything in `assets/` other than the sprites listed in `build.py` is
 source material: original photos, un-keyed screenshots, the sunset reference.
 None of it is loaded at runtime and none of it ships.
+
+## Notes on the music
+
+The mp3 has a LAME tag but no Xing header, so a decoder has no gapless
+information to work with and `<audio loop>` would tick audibly every thirty
+seconds. Web Audio instead: the decoder's leading padding is measured off the
+waveform and skipped, and because the track ends about 5 dB louder than it starts
+each repeat is a separate source overlapping the one before it, crossfaded on an
+equal-power curve. Each pass queues the one after next when it ends, which keeps
+half a minute of slack in the chain so a throttled background tab can't starve it
+into a gap.
 
 ## Notes on the physics
 
