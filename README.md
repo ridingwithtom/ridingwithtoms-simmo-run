@@ -79,7 +79,8 @@ waveform and skipped, and because the track ends about 5 dB louder than it start
 each repeat is a separate source overlapping the one before it, crossfaded on an
 equal-power curve. Each pass queues the one after next when it ends, which keeps
 half a minute of slack in the chain so a throttled background tab can't starve it
-into a gap.
+into a gap. Switching away from the tab parks the audio clock, which both silences
+it and stalls the scheduler; coming back picks up where it left off.
 
 ## Notes on the physics
 

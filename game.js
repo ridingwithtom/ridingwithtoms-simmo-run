@@ -202,6 +202,15 @@
       .catch(() => { musicLoading = false; });      // no music is not a broken game
   }
 
+  // A tab you've switched away from shouldn't keep the desert singing. Parking the
+  // clock rather than stopping the sources means it picks up exactly where it left
+  // off, and it stalls queueAhead for free while it's away.
+  document.addEventListener('visibilitychange', () => {
+    if (!audioCtx) return;
+    if (document.hidden) audioCtx.suspend();
+    else if (musicOn) { const p = audioCtx.resume(); if (p && p.then) p.then(queueAhead, () => {}); else queueAhead(); }
+  });
+
   function applyMusicButton() {
     if (!musicToggle) return;
     musicToggle.classList.toggle('muted', !musicOn);
@@ -214,6 +223,7 @@
     musicToggle.addEventListener('pointerdown', (e) => e.stopPropagation());
     musicToggle.addEventListener('click', (e) => {
       e.stopPropagation();
+      musicToggle.blur();       // or it keeps focus, and Enter re-toggles it later
       musicOn = !musicOn;
       try { localStorage.setItem('simmoMusic', musicOn ? 'on' : 'off'); } catch (_) {}
       applyMusicButton();
