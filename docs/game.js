@@ -1410,7 +1410,15 @@
     parkSign:   { h: 180, bed: 0 },
     stuckBike:  { h: 130, bed: 0.06, align: true },
     maccasSign: { h: 300, bed: 0.03 },
-    bogTiger:   { h: 150, bed: 0.17, align: true },
+    // Three-quarter view, so the sprite's underside is not a ground line — it is the
+    // near-side front wheel's contact patch, sitting 0.6px above the bottom edge at
+    // this size, while the far rear wheel is 35px higher for perspective. A bed of
+    // 0.17 therefore drove the front wheel 23.8px clean through the sand. A light
+    // bed settles the tyre and drawBogSand heaps the sand that makes it look bogged.
+    //
+    // align is off for the same reason: tilting the sprite to the local ground chord
+    // treats that underside as a ground line, which it isn't.
+    bogTiger:   { h: 150, bed: 0.035 },
     // His booted foot touches the bottom edge but the bare one sits 2.8% higher,
     // so a small bed sinks him until both read as planted in the sand.
     brendan:    { h: 210, bed: 0.028 }
