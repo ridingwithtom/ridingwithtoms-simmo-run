@@ -1276,40 +1276,25 @@
   // ---------- camp outside the Birdsville pub ----------
   const CAMP_X = FINISH_DISTANCE - 620;
 
-  function drawTent(x, groundY, w, h, canvas1, canvas2) {
-    // simple A-frame, guy rope and a dark doorway
+  // Swags rather than tents: what you actually sleep in out here. Drawn from the
+  // sprite, mirrored on one of them so the pair doesn't read as a copy-paste.
+  function drawSwag(x, groundY, h, flip) {
+    const lm = LANDMARKS.swag;
+    if (!lm || !lm.ready || !lm.img.naturalHeight) return;
+    const w = lm.img.naturalWidth * (h / lm.img.naturalHeight);
+
+    ctx.save();
+    ctx.translate(x, groundY);
+    ctx.save();
+    ctx.filter = 'blur(2px)';
     ctx.beginPath();
-    ctx.moveTo(x - w / 2, groundY);
-    ctx.lineTo(x, groundY - h);
-    ctx.lineTo(x + w / 2, groundY);
-    ctx.closePath();
-    ctx.fillStyle = canvas1;
+    ctx.ellipse(0, -1, w * 0.40, 4.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20,10,5,0.28)';
     ctx.fill();
-    // shaded right face
-    ctx.beginPath();
-    ctx.moveTo(x, groundY - h);
-    ctx.lineTo(x + w / 2, groundY);
-    ctx.lineTo(x + w * 0.16, groundY);
-    ctx.closePath();
-    ctx.fillStyle = canvas2;
-    ctx.fill();
-    // doorway
-    ctx.beginPath();
-    ctx.moveTo(x - w * 0.12, groundY);
-    ctx.lineTo(x - w * 0.02, groundY - h * 0.62);
-    ctx.lineTo(x + w * 0.08, groundY);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(28,22,16,0.85)';
-    ctx.fill();
-    // ridge pole and peg lines
-    ctx.strokeStyle = 'rgba(40,32,22,0.65)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(x, groundY - h);
-    ctx.lineTo(x + w * 0.62, groundY);
-    ctx.moveTo(x, groundY - h);
-    ctx.lineTo(x - w * 0.62, groundY);
-    ctx.stroke();
+    ctx.restore();
+    if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(lm.img, -w / 2, -h, w, h);
+    ctx.restore();
   }
 
   function drawCamp(screenYOf, t) {
@@ -1317,14 +1302,10 @@
     if (sx < -320 || sx > W + 320) return;
     const gy = (dx) => screenYOf(nearTerrain(CAMP_X + dx));
 
-    drawTent(sx - 74, gy(-74), 78, 52, '#cbb78d', '#a4906a');
-    drawTent(sx + 26, gy(26), 62, 42, '#c2a882', '#9a8460');
-
-    // a couple of swags by the fire
-    ctx.fillStyle = '#7a6a4c';
-    ctx.beginPath();
-    ctx.ellipse(sx - 18, gy(-18) - 5, 15, 5.5, -0.05, 0, Math.PI * 2);
-    ctx.fill();
+    // Two swags rolled out short of the fire. The drawn bedroll that used to sit
+    // between them has gone — it was standing in for exactly this.
+    drawSwag(sx - 84, gy(-84), 45, false);
+    drawSwag(sx + 16, gy(16), 37, true);
 
     // fire ring
     const fx = sx + 96, fy = gy(96);
@@ -1442,7 +1423,8 @@
     bogTiger:   loadLandmark('tiger-sprite.png'),
     brendan:    loadLandmark('brendan-sprite.png'),
     riverGum:   loadLandmark('river-gum.png'),
-    dingo:      loadLandmark('dingo-sprite.png')
+    dingo:      loadLandmark('dingo-sprite.png'),
+    swag:       loadLandmark('swag-sprite.png')
   };
 
   // Roadside scenery: the park sign greets you on the way out of Mt Dare, and

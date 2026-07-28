@@ -32,6 +32,7 @@ DRAWN_H = {
     "brendan-sprite.png": 210,
     "river-gum.png":      400,
     "dingo-sprite.png":    74,
+    "swag-sprite.png":     45,
 }
 # SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase = 152 / 819
 BIKE_SCALE = 152 / 819

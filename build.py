@@ -29,7 +29,7 @@ ICONS = ["icon-180.png", "icon-192.png", "icon-512.png"]
 ASSETS = [
     "bike.png", "mt-dare-hotel.png", "birdsville-pub.png", "big-red-sign.png",
     "park-sign.png", "stuck-bike.png", "maccas-sign.png", "eagle-sprite.png",
-    "tiger-sprite.png", "brendan-sprite.png", "river-gum.png", "dingo-sprite.png",
+    "tiger-sprite.png", "brendan-sprite.png", "river-gum.png", "dingo-sprite.png", "swag-sprite.png",
 ]
 
 
