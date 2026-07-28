@@ -40,8 +40,11 @@ DRAWN_H = {
     "poeppel-post.png":    140,
     "poeppel-sign.png":    190,
 }
-# SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase = 152 / 819
-BIKE_SCALE = 152 / 819
+# The rideable bikes are scaled by wheelbase rather than height, because that is what
+# the game does: SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase. Keep in step with
+# the sprite.wheelbase figures in the BIKES table.
+BIKE_WHEELBASE = 152
+SPRITE_WHEELBASE = {"bike.png": 819, "ktm-bike.png": 621.3}
 
 SRC = os.path.dirname(os.path.abspath(__file__))
 DST = os.path.join(os.path.dirname(SRC), "docs", "assets")
@@ -50,8 +53,9 @@ os.makedirs(DST, exist_ok=True)
 
 def target_size(name, im):
     w, h = im.size
-    if name == "bike.png":
-        want_w = w * BIKE_SCALE * DPR_CAP * MARGIN
+    if name in SPRITE_WHEELBASE:
+        scale = BIKE_WHEELBASE / SPRITE_WHEELBASE[name]
+        want_w = w * scale * DPR_CAP * MARGIN
         return max(1.0, w / want_w)
     want_h = DRAWN_H[name] * DPR_CAP * MARGIN
     return max(1.0, h / want_h)
@@ -93,7 +97,7 @@ def quant_error(original, result):
 
 
 before = after = 0
-for name in ["bike.png"] + list(DRAWN_H):
+for name in list(SPRITE_WHEELBASE) + list(DRAWN_H):
     src = os.path.join(SRC, name)
     im = Image.open(src).convert("RGBA")
     was = os.path.getsize(src)

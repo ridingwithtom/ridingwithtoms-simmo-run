@@ -120,17 +120,26 @@
       sprite: { w: 1215, h: 856,
         floorY: 855, rearX: 196, frontX: 1015, wheelbase: 819,
         wheels: [ { cx: 196, cy: 666, r: 189 }, { cx: 1015, cy: 661, r: 194 } ] },
+      // Putting back what the wheel punch deleted, so the swingarm and fork read as
+      // passing in front of the wheels rather than behind. Measured off the sprite
+      // just outside each disc: the swingarm enters level with the rear axle as a
+      // silver band, and the gold fork runs at 27.5 degrees from vertical along
+      // x = 0.521*y + 643, cut by the punch at (898, 508). An earlier version started
+      // 34px off that line and read as a separate white bar rather than the bottom of
+      // the fork. Silver, not white — it's a slider, not a highlight.
+      unsprung: {
+        arm: [410, 652], armHalf: [21, 15], armFill: '#a8a7a5', armEdge: '#575755',
+        fork: [906, 500], forkKnee: [975, 638], forkHalf: [15, 13, 11],
+        forkFill: '#b7babe', forkEdge: '#6c6f73',
+        lugFill: '#a9acb0', lugEdge: '#666a6e'
+      },
       hull: [[0,261],[45,142],[52,127],[60,115],[69,108],[694,0],[707,0],[1086,367],[1108,392],[1114,399],[1119,406],[1122,411],[1202,587],[1209,619],[1214,650],[1214,656],[1209,706],[1203,725],[1189,763],[1177,782],[1158,804],[1145,816],[1114,836],[1078,849],[1042,855],[171,855],[137,849],[117,842],[104,836],[81,823],[58,804],[52,798],[38,781],[25,757],[22,750],[14,731],[7,706],[0,291]]
     },
     {
       id: 'ktm',
       name: 'Hard',
       trait: 'twice as fast, on a knife edge',
-      // PLACEHOLDER ARTWORK AND GEOMETRY: the KTM sprite isn't in assets/ yet, so this
-      // borrows the WR's. Everything above the sprite line is the real KTM; when the
-      // artwork lands, run it through assets/prep.py and paste the measured floorY,
-      // contact points, wheel circles and hull in, and nothing else here changes.
-      src: 'assets/bike.png',
+      src: 'assets/ktm-bike.png',
       wheelbasePx: 152,
       speed: 860,                   // twice the WR, so the course goes by in 29.5s
       // Scaled to keep the same proportional slack as the WR (fuel/run ~ 1.33). Left
@@ -162,10 +171,25 @@
       // tyre technically drags, but a wheel doing 3.9 rev/s is a blur and going
       // visibly backwards is far worse than not matching the sand exactly.
       spin: 0.5,
-      sprite: { w: 1215, h: 856,
-        floorY: 855, rearX: 196, frontX: 1015, wheelbase: 819,
-        wheels: [ { cx: 196, cy: 666, r: 189 }, { cx: 1015, cy: 661, r: 194 } ] },
-      hull: [[0,261],[45,142],[52,127],[60,115],[69,108],[694,0],[707,0],[1086,367],[1108,392],[1114,399],[1119,406],[1122,411],[1202,587],[1209,619],[1214,650],[1214,656],[1209,706],[1203,725],[1189,763],[1177,782],[1158,804],[1145,816],[1114,836],[1078,849],[1042,855],[171,855],[137,849],[117,842],[104,836],[81,823],[58,804],[52,798],[38,781],[25,757],[22,750],[14,731],[7,706],[0,291]]
+      // Out of assets/prep_ktm.py. The artwork is drawn on a 4.11 degree nose-down
+      // tilt, which that script rotates out before measuring — the game pins both
+      // contact patches to one ground line, so a tilted sprite would ride with one
+      // wheel buried and the other in the air.
+      sprite: { w: 921, h: 688,
+        floorY: 682.5, rearX: 146.6, frontX: 767.9, wheelbase: 621.3,
+        wheels: [ { cx: 146.6, cy: 539.4, r: 143.1 }, { cx: 767.9, cy: 533.3, r: 148.6 } ] },
+      // Measured off this sprite the same way: sampling the ring just outside each
+      // disc, the swingarm crosses at 340-359 degrees in #a3a7aa — level with the
+      // rear axle, as on the WR — and the fork slider crosses at 234-244 in #9b9b9d,
+      // which is 31 degrees off vertical. Its axis runs straight at the axle, so
+      // unlike the WR it needs no knee.
+      unsprung: {
+        arm: [320, 500], armHalf: [20, 14], armFill: '#a3a7aa', armEdge: '#55585b',
+        fork: [672, 374], forkHalf: [16, 13, 12],
+        forkFill: '#9b9b9d', forkEdge: '#5d5d5f',
+        lugFill: '#9b9b9d', lugEdge: '#5d5d5f'
+      },
+      hull: [[1,532],[4,235],[8,224],[17,214],[26,209],[39,203],[538,2],[551,2],[870,322],[917,509],[919,537],[919,539],[916,558],[912,578],[904,597],[900,606],[888,626],[883,632],[870,647],[857,657],[839,668],[804,680],[762,683],[135,686],[97,678],[78,671],[43,645],[23,618],[17,604],[10,586],[4,568],[3,560]]
     }
   ];
 
@@ -1064,24 +1088,31 @@
   }
 
   function drawUnsprung() {
+    const u = bike.unsprung;
+    if (!u) return;
     const rear = SPRITE.wheels[0], front = SPRITE.wheels[1];
 
     // swingarm: pivot side to rear axle, tapering in as real ones do
-    taperedBar(410, 652, rear.cx + 6, rear.cy + 2, 21, 15, '#a8a7a5', '#575755');
+    taperedBar(u.arm[0], u.arm[1], rear.cx + 6, rear.cy + 2,
+               u.armHalf[0], u.armHalf[1], u.armFill, u.armEdge);
 
-    // Fork slider, on the gold tube's own centreline. Measured off the sprite: the
-    // gold runs at 27.5 degrees from vertical along x = 0.521*y + 643, and the disc
-    // punch cuts it at (898, 508). The first version started 34px to the right of
-    // that line, which is why it looked like a separate white bar rather than the
-    // bottom of the fork. Silver, not white — it's a slider, not a highlight.
-    taperedBar(906, 500, 975, 638, 15, 13, '#b7babe', '#6c6f73');
-    // short axle lug, since the fork axis passes just inboard of the wheel centre
-    taperedBar(975, 638, front.cx - 2, front.cy - 3, 13, 11, '#a9acb0', '#666a6e');
+    // Fork slider, on the tube's own centreline — a bike whose fork has a visible
+    // knee gets two segments, one whose axis runs straight to the axle gets one.
+    if (u.forkKnee) {
+      taperedBar(u.fork[0], u.fork[1], u.forkKnee[0], u.forkKnee[1],
+                 u.forkHalf[0], u.forkHalf[1], u.forkFill, u.forkEdge);
+      taperedBar(u.forkKnee[0], u.forkKnee[1], front.cx - 2, front.cy - 3,
+                 u.forkHalf[1], u.forkHalf[2], u.lugFill, u.lugEdge);
+    } else {
+      taperedBar(u.fork[0], u.fork[1], front.cx - 2, front.cy - 3,
+                 u.forkHalf[0], u.forkHalf[2], u.forkFill, u.forkEdge);
+    }
 
-    // axle nuts, so the bars terminate on something
-    for (const [cx, cy] of [[rear.cx, rear.cy], [front.cx, front.cy]]) {
+    // axle nuts, so the bars terminate on something. Sized off the wheel, or the
+    // smaller-wheeled bike wears the other one's bolt heads.
+    for (const wh of [rear, front]) {
       ctx.beginPath();
-      ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+      ctx.arc(wh.cx, wh.cy, wh.r * 0.079, 0, Math.PI * 2);
       ctx.fillStyle = '#3a3b3e';
       ctx.fill();
       ctx.strokeStyle = '#17181a';

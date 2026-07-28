@@ -34,7 +34,14 @@ up is the surprise.
 | pitch damping | 2.9 | 2.2 |
 | input ramp | 7 | 11 |
 
-Everything that differs lives in the `BIKES` table in `game.js`. The lean number is
+Everything that differs lives in the `BIKES` table in `game.js` — including the
+geometry, which is measured off each sprite rather than typed in: the contact patches
+set the wheelbase the physics pivots about, and the hull is what stops a bike rotated
+past vertical driving its bars through the sand.
+
+Because both are scaled by wheelbase rather than height, they come out almost the same
+size on screen (wheel radius 35.08 against 35.01, draw width 225.5 against 225.3), with
+the KTM standing 6% taller. The lean number is
 the sensitivity: both directions come off it, since the rider's torque is
 `input * lean`. It was set from measurement rather than feel — see the physics notes.
 
@@ -83,6 +90,9 @@ Re-run it after changing `game.js`, `index.html`, `style.css` or any sprite —
       prep_gum.py                  the river gum needs its scale-reference figure
                                    removed as well, and it is joined to the tree
                                    through the dirt mound, so --largest can't do it
+      prep_ktm.py                  the KTM arrives with a baked-in checkerboard and
+                                   drawn on a 4 degree tilt, so it is keyed, rotated
+                                   level, then measured like prep.py does the WR
       encode_music.py              trims the soundtrack master by its gapless tag
                                    and re-encodes at 128 kbps (needs ffmpeg + lame)
       optimise.py                  downscales and quantises for the web

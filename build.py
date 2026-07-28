@@ -30,7 +30,7 @@ ICONS = ["icon-180.png", "icon-192.png", "icon-512.png"]
 AUDIO = ["kookaburralonger.128.mp3"]
 # Everything game.js actually loads. Keep this in step with LANDMARKS in game.js.
 ASSETS = [
-    "bike.png", "mt-dare-hotel.png", "birdsville-pub.png", "big-red-sign.png",
+    "bike.png", "ktm-bike.png", "mt-dare-hotel.png", "birdsville-pub.png", "big-red-sign.png",
     "park-sign.png", "stuck-bike.png", "maccas-sign.png", "eagle-sprite.png",
     "tiger-sprite.png", "brendan-sprite.png", "river-gum.png", "dingo-sprite.png", "swag-sprite.png",
     "beardie-sprite.png", "frillneck-sprite.png", "stumpy-sprite.png",
@@ -43,6 +43,9 @@ def check_assets_match_source():
     js = open(os.path.join(ROOT, "game.js")).read()
     referenced = set(re.findall(r"loadLandmark\('([^']+)'\)", js))
     referenced |= set(re.findall(r"\.src = 'assets/([^']+)'", js))
+    # the rideable bikes are declared in the BIKES table rather than assigned to an
+    # Image, so they have their own shape: src: 'assets/...'
+    referenced |= set(re.findall(r"src: 'assets/([^']+)'", js))
     missing = referenced - set(ASSETS)
     if missing:
         sys.exit(f"game.js loads {sorted(missing)}, which build.py doesn't copy. "
