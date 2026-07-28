@@ -39,6 +39,10 @@ DRAWN_H = {
     "eyre-creek-sign.png": 165,
     "poeppel-post.png":    140,
     "poeppel-sign.png":    190,
+    # drawn to the wheel's measured diameter: 2r * SPRITE_SCALE, where the Jeep's
+    # scale is 251/542.1
+    "jeep-wheel-rear.png":  84,
+    "jeep-wheel-front.png": 94,
 }
 # The rideable bikes are scaled by wheelbase rather than height, because that is what
 # the game does: SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase. Keep in step with

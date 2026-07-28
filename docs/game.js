@@ -109,7 +109,13 @@
       fuel: 0,                      // unused; autopilot never burns any
       lean: 0, airLean: 0, pitchDamp: 2.9, airDamp: 0.9, leanLag: 7,
       spin: 1.0,
-      // A Jeep rolls on a steel wheel, not 8 wire spokes, and both ends drive.
+      // A Jeep wheel is solid, so there is nothing to see through and no reason to
+      // redraw it: prep_jeep.py cuts the two discs straight out of the artwork and the
+      // game rotates the real thing. wheelFace stays as the fallback for the case where
+      // an image hasn't arrived — a flaky connection, not a missing file, since build.py
+      // checks those — because a wire-spoked wheel on a Wrangler is worse than a plain
+      // steel one. Both ends drive.
+      wheelArtSrc: ['assets/jeep-wheel-rear.png', 'assets/jeep-wheel-front.png'],
       wheelFace: 'disc',
       frontWheelSpins: true,
       // Measured off the sprite: the tail lamp is the small red block low on the rear
@@ -243,6 +249,12 @@
     b.ready = false;
     b.img.onload = () => { b.ready = true; };
     b.img.src = b.src;
+    b.wheelArt = (b.wheelArtSrc || []).map((src) => {
+      const art = { img: new Image(), ready: false };
+      art.img.onload = () => { art.ready = true; };
+      art.img.src = src;
+      return art;
+    });
   }
 
   function useBike(b) {
@@ -1162,11 +1174,21 @@
     }
   }
 
-  function drawSpinningWheel(wh, spin) {
+  function drawSpinningWheel(wh, spin, index) {
     const r = wh.r;
     ctx.save();
     ctx.translate(wh.cx, wh.cy);
     ctx.rotate(spin);
+
+    // The real wheel, if this vehicle came with one. Drawn to its measured diameter
+    // rather than the image's own size, so it lines up with the punched hole whatever
+    // optimise.py downscaled it to.
+    const art = bike.wheelArt && bike.wheelArt[index];
+    if (art && art.ready) {
+      ctx.drawImage(art.img, -r, -r, r * 2, r * 2);
+      ctx.restore();
+      return;
+    }
 
     // ---- tyre carcass ----
     // An annulus, not a disc: filling the whole circle put an opaque black plate
@@ -1317,7 +1339,7 @@
     ctx.translate(-contactX, -SPRITE.floorY);
     // Rear wheel spins, front stays put. Index 0 is the rear (rearX 196 vs 1015).
     SPRITE.wheels.forEach((wh, i) =>
-      drawSpinningWheel(wh, (i === 0 || bike.frontWheelSpins) ? wheelSpin : 0));
+      drawSpinningWheel(wh, (i === 0 || bike.frontWheelSpins) ? wheelSpin : 0, i));
     drawUnsprung();
     // Explicit destination size, in sprite coordinates. Drawing at the image's
     // natural size would tie the geometry below to whatever resolution bike.png

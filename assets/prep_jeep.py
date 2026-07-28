@@ -1,8 +1,8 @@
 """Prepare the Jeep into a driveable sprite for Chill mode.
 
-Same destination as prep.py and prep_ktm.py — punch the wheels out so the game can
-spin its own, and measure the contact patches, wheel circles and silhouette hull —
-but it gets there differently on two counts:
+Same destination as prep.py and prep_ktm.py — take the wheels out of the body sprite
+so the game can spin them, and measure the contact patches, wheel circles and
+silhouette hull — but it gets there differently on three counts:
 
   * the background is flat grey and the Jeep is *white*, which is only 69 levels of
     luminance away from it. The key band is deliberately tight around the median
@@ -14,10 +14,15 @@ but it gets there differently on two counts:
     They're found from the two contact patches on the ground instead, and each tyre's
     circle is fitted to the arc of the silhouette's underside around its patch, which
     is pure tyre for a good 140px either way.
+  * the wheels don't get redrawn. The bikes' are punched out and rebuilt procedurally
+    so the desert shows between the spokes; a Jeep wheel is solid, so there is nothing
+    to see through and no reason to approximate it. The two discs are cut straight out
+    of the artwork and the game rotates the real thing.
 
     python3 assets/prep_jeep.py
 
-Writes jeep-car.png and jeep-car.json, leaving Jeep.PNG untouched.
+Writes jeep-car.png, jeep-car.json and the two wheel discs, leaving Jeep.PNG
+untouched.
 Needs pillow, numpy and scipy.
 """
 from PIL import Image
@@ -154,6 +159,30 @@ def main():
     arr = np.array(level)
     h, w = arr.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w]
+
+    # A Jeep wheel is solid, so there is nothing to see through it and no reason to
+    # redraw it from scratch. Each disc is cut straight out of the artwork here and the
+    # game rotates the real thing. Safe because the wheel arch sits outside the fitted
+    # circle: measured, the discs are 99.4% opaque and 0.0% bodywork across their upper
+    # halves, so nothing but wheel goes round.
+    for name, wh in (("rear", rear), ("front", front)):
+        r = wh["r"]
+        side = int(np.ceil(r * 2)) + 2
+        cx, cy = wh["cx"], wh["cy"]
+        x0, y0 = int(round(cx - side / 2)), int(round(cy - side / 2))
+        disc = np.zeros((side, side, 4), np.uint8)
+        sy0, sx0 = max(0, y0), max(0, x0)
+        sy1, sx1 = min(h, y0 + side), min(w, x0 + side)
+        disc[sy0 - y0:sy1 - y0, sx0 - x0:sx1 - x0] = arr[sy0:sy1, sx0:sx1]
+        gy, gx = np.mgrid[0:side, 0:side]
+        dist = np.hypot(gx - (cx - x0), gy - (cy - y0))
+        # feathered at the rim, or rotating it shows a jagged edge
+        edge = np.clip((r - dist) / 1.5 + 1.0, 0.0, 1.0)
+        disc[:, :, 3] = (disc[:, :, 3].astype(float) * edge).astype(np.uint8)
+        out_wheel = os.path.join(HERE, f"jeep-wheel-{name}.png")
+        Image.fromarray(disc, "RGBA").save(out_wheel)
+        print(f"  cut {os.path.basename(out_wheel)}: {side}x{side}, r {r:.1f}")
+
     punched = 0
     for wh in (rear, front):
         inside = ((xx - wh["cx"]) ** 2 + (yy - wh["cy"]) ** 2) < (wh["r"] * INNER) ** 2

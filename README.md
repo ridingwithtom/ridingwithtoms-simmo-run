@@ -42,9 +42,14 @@ fuel readout, the lean instructions and the touch zones all hide themselves, bec
 there is nothing to spend, nothing to read and nothing to press. The distance counter
 stays — watching Birdsville come closer is the point.
 
-It also needs a few things the bikes don't: both wheels drive rather than just the
-rear, and the wheel gets a steel face with lug holes instead of eight wire spokes,
-which on a Wrangler read as a pushbike. Its wheelbase is drawn 1.65x a bike's, matching
+It also needs a few things the bikes don't. Both wheels drive rather than just the
+rear. And its wheels aren't redrawn at all: the bikes' are punched out and rebuilt
+procedurally so the desert shows through between the spokes, but a Jeep wheel is solid,
+so there is nothing to see through and no reason to approximate it. `prep_jeep.py` cuts
+the two discs straight out of the artwork — safe because the wheel arch sits outside the
+fitted circle, measured at 0.0% bodywork across each disc's upper half — and the game
+rotates the real thing, drawn to its measured diameter so it lines up with the hole
+whatever `optimise.py` downscaled it to. Its wheelbase is drawn 1.65x a bike's, matching
 a real Wrangler against a real WR250R, which is the other reason the ride is smooth —
 that is 1.65x as much terrain bridged between the contact patches.
 
