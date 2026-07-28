@@ -93,8 +93,10 @@
   const BIKES = [
     {
       id: 'wr250r',
-      name: 'Yamaha WR250R',
-      trait: 'the honest one',
+      // What the start screen shows. Deliberately the difficulty and not the bike:
+      // the player is choosing how hard the run is, and the machine is a surprise.
+      name: 'Easy',
+      trait: 'steady, more fuel',
       src: 'assets/bike.png',
       wheelbasePx: 152,             // on-screen px between contacts
       speed: 430,                   // forward speed on dry sand (world px/sec)
@@ -121,8 +123,8 @@
     },
     {
       id: 'ktm',
-      name: 'KTM',
-      trait: 'twice as fast, twice as mean',
+      name: 'Hard',
+      trait: 'twice as fast, twitchier',
       // PLACEHOLDER ARTWORK AND GEOMETRY: the KTM sprite isn't in assets/ yet, so this
       // borrows the WR's. Everything above the sprite line is the real KTM; when the
       // artwork lands, run it through assets/prep.py and paste the measured floorY,
@@ -481,8 +483,8 @@
 
     const hint = document.createElement('p');
     hint.id = 'bike-pick-hint';
-    hint.innerHTML = '<span class="kbd-only">\u2190 \u2192 to change bike</span>' +
-                     '<span class="touch-only">tap a bike to change</span>';
+    hint.innerHTML = '<span class="kbd-only">\u2190 \u2192 to change</span>' +
+                     '<span class="touch-only">tap to change</span>';
     bikePick.parentNode.insertBefore(hint, bikePick.nextSibling);
   }
 

@@ -20,10 +20,12 @@ choice sticks in `localStorage`.
 
 ## Two bikes
 
-Pick one on the start screen — arrow keys on a keyboard, tap a card on a phone; the
-choice sticks in `localStorage`.
+Pick a difficulty on the start screen — arrow keys on a keyboard, tap a card on a
+phone; the choice sticks in `localStorage`. The cards say Easy and Hard rather than
+naming the machines: the player is choosing how hard the run is, and which bike turns
+up is the surprise.
 
-| | WR250R | KTM |
+| | Easy (WR250R) | Hard (KTM) |
 |---|---|---|
 | speed | 430 px/s | 860 px/s |
 | the course takes | 62s | 31s |
