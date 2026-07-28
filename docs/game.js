@@ -92,6 +92,37 @@
   // driving its bars down through the sand.
   const BIKES = [
     {
+      id: 'jeep',
+      name: 'Chill',
+      trait: 'a drive, nothing to do',
+      src: 'assets/jeep-car.png',
+      // Nothing to hold up, nothing to stack, nothing to run out of. The whole game
+      // is a balance task, so this turns that task off rather than making it easy:
+      // no lean, no wheelie, no crest launch, no crash rules and no fuel clock. The
+      // car simply follows the ground to Birdsville while you watch.
+      autopilot: true,
+      // A Wrangler's wheelbase is 2424mm against the WR's 1465, so it is drawn 1.65
+      // times as long. That is also 1.65 times as much terrain bridged between the
+      // contact patches, which is the other reason this ride is smooth.
+      wheelbasePx: 251,
+      speed: 215,                   // half the WR, so the crossing takes about two minutes
+      fuel: 0,                      // unused; autopilot never burns any
+      lean: 0, airLean: 0, pitchDamp: 2.9, airDamp: 0.9, leanLag: 7,
+      spin: 1.0,
+      // A Jeep rolls on a steel wheel, not 8 wire spokes, and both ends drive.
+      wheelFace: 'disc',
+      frontWheelSpins: true,
+      // Measured off the sprite: the tail lamp is the small red block low on the rear
+      // body at (76, 487), and the headlight sits in the grille just inside the
+      // frontmost bodywork, which runs y 481-516 at x 900.
+      lamp: { x: 888, y: 470 },
+      tail: { x: 76, y: 487 },
+      sprite: { w: 906, h: 655,
+        floorY: 653.5, rearX: 208.6, frontX: 750.7, wheelbase: 542.1,
+        wheels: [ { cx: 208.6, cy: 564.1, r: 89.3 }, { cx: 750.7, cy: 553.0, r: 100.5 } ] },
+      hull: [[2,409],[3,350],[54,203],[56,200],[209,36],[213,32],[230,26],[302,2],[303,2],[306,3],[876,408],[882,414],[883,416],[904,483],[904,504],[903,510],[901,515],[833,610],[821,625],[812,634],[803,641],[793,646],[774,653],[203,653],[189,652],[165,647],[33,538],[31,536],[28,531],[6,486],[4,481],[2,472]]
+    },
+    {
       id: 'wr250r',
       // What the start screen shows. Deliberately the difficulty and not the bike:
       // the player is choosing how hard the run is, and the machine is a surprise.
@@ -117,6 +148,12 @@
       // spacing per frame, which reads as unambiguous forward rotation, so the WR
       // needs no cheat.
       spin: 1.0,
+      // The headlight on the front number board, the tail light under the rear rack.
+      // x=150 sat inside the black rear bag, which lit the luggage up rather than
+      // reading as a lamp. The bag's leading edge is around x=120; the tail tidy
+      // behind it runs back to x=52, which is where the light actually belongs.
+      lamp: { x: 880, y: 258 },
+      tail: { x: 78, y: 400 },
       sprite: { w: 1215, h: 856,
         floorY: 855, rearX: 196, frontX: 1015, wheelbase: 819,
         wheels: [ { cx: 196, cy: 666, r: 189 }, { cx: 1015, cy: 661, r: 194 } ] },
@@ -171,6 +208,8 @@
       // tyre technically drags, but a wheel doing 3.9 rev/s is a blur and going
       // visibly backwards is far worse than not matching the sand exactly.
       spin: 0.5,
+      lamp: { x: 726, y: 286 },     // the mask at the top of the forks
+      tail: { x: 58, y: 300 },      // the tip of the rear guard
       // Out of assets/prep_ktm.py. The artwork is drawn on a 4.11 degree nose-down
       // tilt, which that script rotates out before measuring — the game pins both
       // contact patches to one ground line, so a tilted sprite would ride with one
@@ -197,7 +236,7 @@
   let SPRITE, SPRITE_HULL, BIKE_WHEELBASE, SPRITE_SCALE, HALF_WHEELBASE, SPRITE_MID_X,
       WHEEL_WORLD_R, BIKE_DRAW_W, BIKE_ANCHOR_TO_LEFT, RIDE_SPEED, FUEL_START,
       LEAN_TORQUE, AIR_LEAN_TORQUE, PITCH_DAMPING, AIR_DAMPING, SPIN_READABILITY,
-      LEAN_LAG;
+      LEAN_LAG, AUTOPILOT;
 
   for (const b of BIKES) {
     b.img = new Image();
@@ -227,10 +266,12 @@
     AIR_DAMPING = b.airDamp;
     SPIN_READABILITY = b.spin;
     LEAN_LAG = b.leanLag;
+    AUTOPILOT = !!b.autopilot;
   }
   let savedBike = null;
   try { savedBike = localStorage.getItem('simmoBike'); } catch (_) {}
-  useBike(BIKES.find((b) => b.id === savedBike) || BIKES[0]);
+  useBike(BIKES.find((b) => b.id === savedBike) ||
+          BIKES.find((b) => b.id === 'wr250r') || BIKES[0]);
 
 
   // ---------- music ----------
@@ -528,9 +569,9 @@
   window.addEventListener('keydown', (e) => {
     if (e.key in keys) { keys[e.key] = true; e.preventDefault(); return; }
     if (state.mode === 'title' &&
-        (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === '1' || e.key === '2')) {
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || /^[1-9]$/.test(e.key))) {
       const at = BIKES.indexOf(bike);
-      const to = e.key === '1' ? 0 : e.key === '2' ? 1
+      const to = /^[0-9]$/.test(e.key) ? Number(e.key) - 1
                : (at + (e.key === 'ArrowRight' ? 1 : BIKES.length - 1)) % BIKES.length;
       if (BIKES[to]) pickBike(BIKES[to].id);
       e.preventDefault();
@@ -1181,8 +1222,27 @@
     ctx.lineWidth = r * 0.016;
     ctx.stroke();
 
-    // ---- bold spokes, one accent ----
     const spokeOuter = rimMid - rimWidth / 2;
+    if (bike.wheelFace === 'disc') {
+      // ---- steel wheel: a solid face with lug holes ----
+      // Wire spokes on a Wrangler read as a pushbike wheel. Colours off the sprite,
+      // which wears the same red dirt as everything else out there.
+      ctx.beginPath();
+      ctx.arc(0, 0, r * spokeOuter, 0, Math.PI * 2);
+      ctx.fillStyle = '#6d5636';
+      ctx.fill();
+      ctx.strokeStyle = '#2f2415';
+      ctx.lineWidth = r * 0.035;
+      ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.26;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * r * 0.44, Math.sin(a) * r * 0.44, r * 0.115, 0, Math.PI * 2);
+        ctx.fillStyle = '#33281a';
+        ctx.fill();
+      }
+    } else {
+    // ---- bold spokes, one accent ----
     for (let i = 0; i < SPOKES; i++) {
       const a = (i / SPOKES) * Math.PI * 2;
       ctx.strokeStyle = i === 0 ? '#2a2d33' : '#121317';
@@ -1191,6 +1251,7 @@
       ctx.moveTo(Math.cos(a) * r * 0.16, Math.sin(a) * r * 0.16);
       ctx.lineTo(Math.cos(a) * r * spokeOuter, Math.sin(a) * r * spokeOuter);
       ctx.stroke();
+    }
     }
 
     // ---- valve stem ----
@@ -1255,7 +1316,8 @@
     ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
     ctx.translate(-contactX, -SPRITE.floorY);
     // Rear wheel spins, front stays put. Index 0 is the rear (rearX 196 vs 1015).
-    SPRITE.wheels.forEach((wh, i) => drawSpinningWheel(wh, i === 0 ? wheelSpin : 0));
+    SPRITE.wheels.forEach((wh, i) =>
+      drawSpinningWheel(wh, (i === 0 || bike.frontWheelSpins) ? wheelSpin : 0));
     drawUnsprung();
     // Explicit destination size, in sprite coordinates. Drawing at the image's
     // natural size would tie the geometry below to whatever resolution bike.png
@@ -1287,14 +1349,11 @@
   }
 
   // ---------- headlight and tail light ----------
-  // Lamp positions measured in sprite space: the headlight on the front number
-  // board, the tail light under the rear rack. Drawn after the day tint so they
-  // add light to the scene rather than being darkened along with it.
-  const LAMP_POS = { x: 880, y: 258 };
-  // x=150 sat inside the black rear bag, which lit the luggage up rather than
-  // reading as a lamp. The bag's leading edge is around x=120; the tail tidy
-  // behind it runs back to x=52, which is where the light actually belongs.
-  const TAIL_POS = { x: 78, y: 400 };
+  // Lamp positions live in each vehicle's own sprite space — see BIKES. They cannot
+  // be shared or scaled between them: a car carries its headlight low against its
+  // total height where a dirt bike's sits high on the number board, and the WR's
+  // numbers put the Jeep's beam out in mid-air above the bonnet. Drawn after the day
+  // tint so they add light to the scene rather than being darkened along with it.
 
   function spriteToScreen(sx, sy, xf) {
     const cos = Math.cos(xf.angle), sin = Math.sin(xf.angle);
@@ -1308,8 +1367,8 @@
     const lvl = clamp((0.20 - cyc.sunAlt) / 0.32, 0, 1);
     if (lvl < 0.02 || !bikeXform || !bike.ready) return;
     const xf = bikeXform;
-    const [hx, hy] = spriteToScreen(LAMP_POS.x, LAMP_POS.y, xf);
-    const [tx, ty] = spriteToScreen(TAIL_POS.x, TAIL_POS.y, xf);
+    const [hx, hy] = spriteToScreen(bike.lamp.x, bike.lamp.y, xf);
+    const [tx, ty] = spriteToScreen(bike.tail.x, bike.tail.y, xf);
     const cos = Math.cos(xf.angle), sin = Math.sin(xf.angle);
     const flick = 0.94 + 0.06 * Math.sin(t * 21);
 
@@ -2518,6 +2577,13 @@
   // Smooth in between, so resizing never makes the scene jump.
   function pairInset(groupW) {
     const spare = W - groupW;
+    // Negative spare means the pair is wider than the frame, which the Jeep manages on
+    // a phone held upright: it is over twice a bike's drawn width. Sliding the group
+    // left by the overflow keeps the vehicle whole and lets the pub run off the left
+    // edge instead — on the picker screen the machine you are about to drive is the
+    // thing worth seeing. Returning 0 here, as this used to, pinned the pub to the
+    // left and cut the Jeep's nose off.
+    if (spare < 0) return spare - 6;
     return spare * clamp((spare - 20) / 120, 0, 0.5);
   }
 
@@ -2704,11 +2770,12 @@
   function startRun() {
     state.mode = 'riding';
     document.body.classList.remove('on-title');
-    state.pitch = START_PITCH;
+    state.pitch = AUTOPILOT ? 0 : START_PITCH;
     state.pitchVel = 0;
     state.graceTimer = WHEELIE_GRACE;
     startScreen.classList.add('hidden');
     document.body.classList.add('riding');   // reveals the touch lean zones
+    document.body.classList.toggle('autopilot', AUTOPILOT);
   }
 
   // Where the chassis rests: both tyres sit exactly on the sand and the chassis
@@ -2758,10 +2825,11 @@
 
   // ---------- simulation ----------
   function update(dt) {
-    // fuel is the clock: it drains while you ride, and stacks cost you dearly
-    state.fuel -= dt;
+    // fuel is the clock: it drains while you ride, and stacks cost you dearly.
+    // Chill has no clock — there is nothing to fail at, so there is nothing to time.
+    if (!AUTOPILOT) state.fuel -= dt;
     state.elapsed += dt;
-    if (state.fuel <= 0) {
+    if (!AUTOPILOT && state.fuel <= 0) {
       state.fuel = 0;
       state.mode = 'dead';
       document.body.classList.remove('riding');
@@ -2824,9 +2892,11 @@
     state.startFrame += (0 - state.startFrame) * Math.min(1, dt * START_SHIFT_EASE);
     if (state.startFrame < 0.002) state.startFrame = 0;
 
-    if (keys.ArrowUp) leanTarget += 1;
-    if (keys.ArrowDown) leanTarget -= 1;
-    if (!leanTarget) leanTarget = touchLeanSum();
+    if (!AUTOPILOT) {
+      if (keys.ArrowUp) leanTarget += 1;
+      if (keys.ArrowDown) leanTarget -= 1;
+      if (!leanTarget) leanTarget = touchLeanSum();
+    }
     state.leanInput += (leanTarget - state.leanInput) * Math.min(1, dt * LEAN_LAG);
 
     // Dune crest launches the bike. Waiting for the elevation to actually start
@@ -2849,7 +2919,8 @@
 
     const flattening = state.climbPeakSlope > 0 &&
                        slope < state.climbPeakSlope * CREST_FLATTEN;
-    if (state.climbAccum > MIN_CLIMB && (flattening || dElev <= 0)) {
+    // A car doesn't send it off Big Red — it drives over and down the other side.
+    if (!AUTOPILOT && state.climbAccum > MIN_CLIMB && (flattening || dElev <= 0)) {
       if (!state.airborne) {
         state.airborne = true;
         state.angleVel = state.pitchVel;
@@ -2904,6 +2975,12 @@
       // chassis attitude, not from pitch. Using pitch made the bike behave as if
       // it were on the flat: landing off Big Red onto the 17-degree descent put
       // it right on its balance point and it looped every time.
+      if (AUTOPILOT) {
+        // four wheels on the sand: the chassis is the ground it stands on, and the
+        // rider contributes nothing. Falls through to the same angle bookkeeping.
+        state.pitch = 0;
+        state.pitchVel = 0;
+      }
       const absAngle = ground.angle + state.pitch;
       const accel = state.leanInput * LEAN_TORQUE
                   + GRAVITY_TORQUE * Math.cos(COM_ANGLE - absAngle)
@@ -2917,7 +2994,8 @@
     if (state.graceTimer > 0) state.graceTimer -= dt;
 
     let reason = '';
-    if (landedHard) reason = 'BAD LANDING';
+    if (AUTOPILOT) reason = '';
+    else if (landedHard) reason = 'BAD LANDING';
     else if (Math.abs(state.angle) > CRASH_FLIP_ANGLE) reason = 'LOOPED IT';
     else if (!state.airborne && state.graceTimer <= 0) {
       // the two rules that make this a wheelie run

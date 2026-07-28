@@ -18,21 +18,35 @@ the join. It only downloads once you tap or press space, so it never holds up th
 first paint, and the speaker button in the bottom right corner turns it off — the
 choice sticks in `localStorage`.
 
-## Two bikes
+## Three ways across
 
-Pick a difficulty on the start screen — arrow keys on a keyboard, tap a card on a
-phone; the choice sticks in `localStorage`. The cards say Easy and Hard rather than
-naming the machines: the player is choosing how hard the run is, and which bike turns
-up is the surprise.
+Pick one on the start screen — arrow keys or 1-3 on a keyboard, tap a card on a phone;
+the choice sticks in `localStorage`. The cards name the difficulty rather than the
+machine: the player is choosing how hard the run is, and what turns up is the surprise.
+Easy is the default for a first-timer, not whatever happens to sit leftmost.
 
-| | Easy (WR250R) | Hard (KTM) |
-|---|---|---|
-| speed | 430 px/s | 860 px/s |
-| the course takes | 62s | 31s |
-| fuel | 82s | 41s |
-| lean torque | 7 | 20 |
-| pitch damping | 2.9 | 2.2 |
-| input ramp | 7 | 11 |
+| | Chill (Jeep) | Easy (WR250R) | Hard (KTM) |
+|---|---|---|---|
+| speed | 215 px/s | 430 px/s | 860 px/s |
+| the course takes | 121s | 62s | 31s |
+| fuel | none | 82s | 41s |
+| lean torque | — | 7 | 20 |
+| pitch damping | — | 2.9 | 2.2 |
+| input ramp | — | 7 | 11 |
+
+**Chill** turns the game off rather than making it easy. The whole thing is a balance
+task, so `autopilot` skips the lot: no lean input, no wheelie, no crest launch off Big
+Red, no crash rules and no fuel clock. The Jeep just follows the ground to Birdsville
+in about two minutes while you watch, wading Eyre Creek at 116 px/s on the way. The
+fuel readout, the lean instructions and the touch zones all hide themselves, because
+there is nothing to spend, nothing to read and nothing to press. The distance counter
+stays — watching Birdsville come closer is the point.
+
+It also needs a few things the bikes don't: both wheels drive rather than just the
+rear, and the wheel gets a steel face with lug holes instead of eight wire spokes,
+which on a Wrangler read as a pushbike. Its wheelbase is drawn 1.65x a bike's, matching
+a real Wrangler against a real WR250R, which is the other reason the ride is smooth —
+that is 1.65x as much terrain bridged between the contact patches.
 
 Everything that differs lives in the `BIKES` table in `game.js` — including the
 geometry, which is measured off each sprite rather than typed in: the contact patches
@@ -93,6 +107,11 @@ Re-run it after changing `game.js`, `index.html`, `style.css` or any sprite —
       prep_ktm.py                  the KTM arrives with a baked-in checkerboard and
                                    drawn on a 4 degree tilt, so it is keyed, rotated
                                    level, then measured like prep.py does the WR
+      prep_jeep.py                 the Jeep is white on flat grey, only 69 levels
+                                   apart, and its wheels can't be found the way a
+                                   bike's are — the bumpers own the silhouette's
+                                   extremes, so the tyres come off their ground
+                                   contacts instead
       encode_music.py              trims the soundtrack master by its gapless tag
                                    and re-encodes at 128 kbps (needs ffmpeg + lame)
       optimise.py                  downscales and quantises for the web

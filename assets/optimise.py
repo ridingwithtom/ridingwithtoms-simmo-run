@@ -43,8 +43,8 @@ DRAWN_H = {
 # The rideable bikes are scaled by wheelbase rather than height, because that is what
 # the game does: SPRITE_SCALE = BIKE_WHEELBASE / SPRITE.wheelbase. Keep in step with
 # the sprite.wheelbase figures in the BIKES table.
-BIKE_WHEELBASE = 152
-SPRITE_WHEELBASE = {"bike.png": 819, "ktm-bike.png": 621.3}
+BIKE_WHEELBASE = {"bike.png": 152, "ktm-bike.png": 152, "jeep-car.png": 251}
+SPRITE_WHEELBASE = {"bike.png": 819, "ktm-bike.png": 621.3, "jeep-car.png": 542.1}
 
 SRC = os.path.dirname(os.path.abspath(__file__))
 DST = os.path.join(os.path.dirname(SRC), "docs", "assets")
@@ -54,7 +54,7 @@ os.makedirs(DST, exist_ok=True)
 def target_size(name, im):
     w, h = im.size
     if name in SPRITE_WHEELBASE:
-        scale = BIKE_WHEELBASE / SPRITE_WHEELBASE[name]
+        scale = BIKE_WHEELBASE[name] / SPRITE_WHEELBASE[name]
         want_w = w * scale * DPR_CAP * MARGIN
         return max(1.0, w / want_w)
     want_h = DRAWN_H[name] * DPR_CAP * MARGIN
